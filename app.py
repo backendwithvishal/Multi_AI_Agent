@@ -3,24 +3,13 @@ import traceback
 
 import uvicorn
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
 from backend import run_travel_agent, resume_travel_agent
-
-# Make nest_asyncio import safe for missing package or nest-asyncio2 variants
-try:
-    # pyrefly: ignore [missing-import]
-    import nest_asyncio
-    nest_asyncio.apply()
-except ImportError:
-    try:
-        import nest_asyncio2 as nest_asyncio
-        nest_asyncio.apply()
-    except ImportError:
-        pass
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -31,6 +20,14 @@ app = FastAPI(
         "Human-in-the-Loop, and FastAPI Frontend"
     ),
     version="2.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.mount(
@@ -76,7 +73,7 @@ async def travel_planner(request_data: TravelRequest):
                 },
             )
 
-        result = run_travel_agent(
+        result = await run_travel_agent(
             user_input=user_message,
             thread_id=request_data.thread_id,
         )
@@ -96,7 +93,7 @@ async def travel_planner(request_data: TravelRequest):
             status_code=500,
             content={
                 "success": False,
-                "error": str(exc),
+                "error": "An unexpected internal error occurred while processing your request.",
             },
         )
 
@@ -113,7 +110,7 @@ async def approve_travel_plan(request_data: ApprovalRequest):
                 },
             )
 
-        result = resume_travel_agent(
+        result = await resume_travel_agent(
             thread_id=request_data.thread_id,
             approved=request_data.approved,
             feedback=request_data.feedback,
@@ -134,7 +131,7 @@ async def approve_travel_plan(request_data: ApprovalRequest):
             status_code=500,
             content={
                 "success": False,
-                "error": str(exc),
+                "error": "An unexpected internal error occurred while resuming the travel plan.",
             },
         )
 
