@@ -50,18 +50,15 @@ def get_database_url():
     return database_url
 
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY is missing. Please add it to your .env file.")
-
-# =========================
-# LLM - original model kept
-# =========================
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=GROQ_API_KEY,
-)
+if GROQ_API_KEY:
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        api_key=GROQ_API_KEY,
+    )
+else:
+    llm = None
 
 # =========================
 # State - original fields kept, new control fields added
@@ -114,6 +111,8 @@ AGENT_ORDER = [
 
 
 def _llm_text(system_prompt: str, user_prompt: str) -> str:
+    if not llm:
+        raise ValueError("GROQ_API_KEY is missing. Please add your GROQ_API_KEY to .env file.")
     response = llm.invoke(
         [
             SystemMessage(content=system_prompt),
@@ -717,16 +716,23 @@ graph.add_edge("final_agent", END)
 graph.add_edge("guardrail_blocked", END)
 
 # =========================
-# PostgreSQL Checkpointer - original persistence kept
+# Checkpointer - PostgreSQL with MemorySaver fallback
 # =========================
-DATABASE_URL = get_database_url()
-_conn = psycopg.connect(
-    DATABASE_URL,
-    autocommit=True,
-    row_factory=dict_row,
-)
-checkpointer = PostgresSaver(_conn)
-checkpointer.setup()
+try:
+    DATABASE_URL = get_database_url()
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL not set in environment.")
+    _conn = psycopg.connect(
+        DATABASE_URL,
+        autocommit=True,
+        row_factory=dict_row,
+    )
+    checkpointer = PostgresSaver(_conn)
+    checkpointer.setup()
+except Exception as exc:
+    print(f"PostgreSQL checkpointer not initialized ({exc}). Using MemorySaver fallback.")
+    from langgraph.checkpoint.memory import MemorySaver
+    checkpointer = MemorySaver()
 
 travel_graph = graph.compile(checkpointer=checkpointer)
 

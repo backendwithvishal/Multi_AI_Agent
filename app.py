@@ -10,11 +10,17 @@ from pydantic import BaseModel, Field
 
 from backend import run_travel_agent, resume_travel_agent
 
-# This is kept from the original project to allow the existing synchronous
-# agent functions to call async MCP helpers inside FastAPI.
-import nest_asyncio
-
-nest_asyncio.apply()
+# Make nest_asyncio import safe for missing package or nest-asyncio2 variants
+try:
+    # pyrefly: ignore [missing-import]
+    import nest_asyncio
+    nest_asyncio.apply()
+except ImportError:
+    try:
+        import nest_asyncio2 as nest_asyncio
+        nest_asyncio.apply()
+    except ImportError:
+        pass
 
 BASE_DIR = Path(__file__).resolve().parent
 
