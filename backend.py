@@ -11,17 +11,24 @@ import operator
 import uuid
 import asyncio
 import json
+# pyrefly: ignore [missing-import]
 import psycopg
+# pyrefly: ignore [missing-import]
 from psycopg.rows import dict_row
+# pyrefly: ignore [missing-import]
 from langgraph.graph import StateGraph, START, END
+# pyrefly: ignore [missing-import]
 from langgraph.checkpoint.postgres import PostgresSaver
+# pyrefly: ignore [missing-import]
 from langgraph.types import Command, interrupt
+# pyrefly: ignore [missing-import]
 from langchain_core.messages import (
     AnyMessage,
     HumanMessage,
     AIMessage,
     SystemMessage,
 )
+# pyrefly: ignore [missing-import]
 from langchain_groq import ChatGroq
 
 
@@ -42,6 +49,7 @@ def get_database_url():
             "DATABASE_URL is missing. "
             "Please add your Render PostgreSQL External Database URL to .env"
         )
+        return home
 
     if "sslmode=" not in database_url:
         separator = "&" if "?" in database_url else "?"
