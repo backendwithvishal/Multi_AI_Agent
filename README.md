@@ -1,6 +1,6 @@
-# Multi-Agent-System-using-LangGraph-MCP-Supervisor-Guardrails-HITL
+# Vishal Sanam Multi-Agent AI System (LangGraph, MCP, Supervisor, Guardrails, HITL)
 
-A demo multi-agent system that uses LangGraph and MCP to implement a travel-planning assistant with a Supervisor, input Guardrails, and Human-In-The-Loop (HITL) approval flows. The project includes a FastAPI frontend, example MCP server, and client helpers to demonstrate how agents, supervisors, and guardrails can be composed into a safe, reviewable planning pipeline.
+A multi-agent travel-planning application developed by Vishal Sanam that uses LangGraph and MCP to implement a travel-planning assistant with a Supervisor, input Guardrails, and Human-In-The-Loop (HITL) approval flows. The project includes a FastAPI frontend, example MCP server, and client helpers to demonstrate how agents, supervisors, and guardrails can be composed into a safe, reviewable planning pipeline.
 
 Key ideas:
 - Multi-agent coordination using LangGraph and MCP
@@ -52,7 +52,7 @@ uvicorn app:app --reload --host 127.0.0.1 --port 8000
 
 4. Open the web UI
 
-Visit http://127.0.0.1:8000 in your browser to use the TripMate frontend.
+Visit http://127.0.0.1:8000 in your browser to use the Vishal Sanam AI Travel Planner frontend.
 
 Running the MCP server (example)
 - The repository includes `custom_weather_mcp_server.py` as an example MCP server. Run it in a separate terminal if you want to experiment with custom adapters used by the demo.
@@ -78,10 +78,10 @@ Contributing
 - Contributions are welcome. Please open issues or pull requests for bug fixes, documentation improvements, or new adapter examples.
 
 License
-- This repository follows the license in the `LICENSE` file.
+- Copyright (c) 2026 Vishal Sanam. This repository follows the terms in the `LICENSE` file.
 
 Acknowledgements
-- Built as a demonstration of LangGraph + MCP patterns with supervisor and guardrail concepts.
+- Built as a demonstration of LangGraph + MCP patterns with supervisor and guardrail concepts by Vishal Sanam.
 
 Contact
-- For questions or suggestions, open an issue or contact the repository owner.
+- For questions or suggestions, contact Vishal Sanam (@backendwithvishal).
