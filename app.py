@@ -6,9 +6,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend import resume_travel_agent, run_travel_agent
@@ -18,10 +16,10 @@ from middleware import RequestCorrelationMiddleware, SlidingWindowRateLimiterMid
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(
-    title="TripMate AI Backend",
+    title="TripMate AI Backend Engine",
     description=(
         "Production Enterprise Multi-Agent Travel Planner Engine built with "
-        "LangGraph, MCP, FastAPI, Async Streaming, Sliding Window Rate Limiting, "
+        "LangGraph, MCP, FastAPI, Async SSE Streaming, Sliding Window Rate Limiting, "
         "and Human-in-the-Loop approval workflows."
     ),
     version="2.5.0",
@@ -47,14 +45,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount(
-    "/static",
-    StaticFiles(directory=str(BASE_DIR / "static")),
-    name="static",
-)
-
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
 
 class TravelRequest(BaseModel):
     message: str
@@ -67,13 +57,20 @@ class ApprovalRequest(BaseModel):
     feedback: str = ""
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={},
-    )
+@app.get("/")
+async def root(request: Request):
+    return {
+        "service": "TripMate AI Multi-Agent Backend Engine",
+        "version": app.version,
+        "docs_url": "/docs",
+        "request_id": getattr(request.state, "request_id", None),
+        "endpoints": {
+            "travel": "POST /api/travel",
+            "travel_stream": "POST /api/travel/stream",
+            "travel_approve": "POST /api/travel/approve",
+            "health": "GET /health",
+        },
+    }
 
 
 @app.post("/api/travel")
