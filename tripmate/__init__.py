@@ -1,0 +1,1 @@
+# TripMate AI Core Package

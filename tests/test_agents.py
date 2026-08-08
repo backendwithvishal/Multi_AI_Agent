@@ -1,14 +1,40 @@
-# pyrefly: ignore [missing-import]
+import json
+from typing import Any, Dict
 import pytest
 from unittest.mock import AsyncMock, patch
-
-from backend import (
-    _json_from_llm,
-    _empty_constraints,
-    supervisor_agent,
-    guardrail_blocked_agent,
-    TravelState,
+from tripmate.agents.supervisor import SupervisorRouting, TripConstraints
+from tripmate.graph.state import TravelState
+from tripmate.graph.workflow import (
+    supervisor_node as supervisor_agent,
+    guardrail_blocked_node as guardrail_blocked_agent,
 )
+
+
+def _json_from_llm(text: str) -> Dict[str, Any]:
+    cleaned = text.strip()
+    if "```json" in cleaned:
+        cleaned = cleaned.split("```json")[-1].split("```")[0].strip()
+    elif "```" in cleaned:
+        cleaned = cleaned.split("```")[1].split("```")[0].strip()
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("The model did not return a JSON object.")
+
+    return json.loads(cleaned[start : end + 1])
+
+
+def _empty_constraints() -> Dict[str, Any]:
+    return {
+        "destination": "",
+        "origin": "",
+        "duration": "",
+        "budget": "",
+        "travel_style": "",
+        "special_preferences": [],
+    }
 
 
 def test_json_from_llm_valid():
@@ -43,12 +69,15 @@ async def test_guardrail_blocked_agent():
 
 
 @pytest.mark.asyncio
-@patch("backend._llm_text", new_callable=AsyncMock)
-async def test_supervisor_agent_allowed(mock_llm_text):
-    mock_llm_text.side_effect = [
-        '{"allowed": true, "reason": ""}',
-        '{"selected_agents": ["flight_agent", "hotel_agent"], "trip_constraints": {"destination": "Paris"}, "reasoning": "Valid Paris trip"}',
-    ]
+@patch("tripmate.graph.workflow.run_guardrail_check", new_callable=AsyncMock)
+@patch("tripmate.graph.workflow.run_supervisor_routing", new_callable=AsyncMock)
+async def test_supervisor_agent_allowed(mock_routing, mock_guardrail):
+    mock_guardrail.return_value = (True, "")
+    mock_routing.return_value = SupervisorRouting(
+        selected_agents=["flight_agent", "hotel_agent", "itinerary_agent"],
+        trip_constraints=TripConstraints(destination="Paris"),
+        reasoning="Valid Paris trip",
+    )
 
     state: TravelState = {
         "user_query": "Plan a 3 day trip to Paris",

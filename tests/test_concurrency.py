@@ -2,8 +2,9 @@ import asyncio
 import time
 # pyrefly: ignore [missing-import]
 import pytest
-from backend import parallel_specialists_node, TravelState
-from backend_cache import AsyncTTLCache
+from tripmate.graph.workflow import parallel_specialists_node
+from tripmate.graph.state import TravelState
+from tripmate.cache.ttl_cache import BoundedAsyncTTLCache as AsyncTTLCache
 
 
 @pytest.mark.asyncio

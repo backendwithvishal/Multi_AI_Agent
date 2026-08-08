@@ -1,0 +1,144 @@
+{
+	"info": {
+		"_postman_id": "a7e1f4b8-392a-4c28-9d8e-123456789abc",
+		"name": "TripMate AI Multi-Agent Backend API",
+		"description": "Postman API Collection for TripMate AI Multi-Agent Travel Planner Engine.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "System Health & Diagnostics",
+			"item": [
+				{
+					"name": "GET /api/v1/health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/health",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "health"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/liveness",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/liveness",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "liveness"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/readiness",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/readiness",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "readiness"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Multi-Agent Workflows",
+			"item": [
+				{
+					"name": "POST /api/v1/travel (Create Plan)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Plan a 5-day trip to Paris under $2000\",\n  \"thread_id\": \"test_thread_101\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/travel",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "travel"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/travel/stream (SSE Events)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Plan a 3-day trip to Tokyo\",\n  \"thread_id\": \"test_thread_102\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/travel/stream",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "travel", "stream"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/travel/approve (HITL Approval)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"thread_id\": \"test_thread_101\",\n  \"approved\": true,\n  \"feedback\": \"Itinerary looks great!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/travel/approve",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "travel", "approve"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000"
+		},
+		{
+			"key": "api_key",
+			"value": "your_api_key_here"
+		}
+	]
+}
