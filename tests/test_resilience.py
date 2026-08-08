@@ -1,3 +1,9 @@
+"""
+Resilience & Circuit Breaker Test Suite
+
+Tests circuit breaker state transitions (CLOSED -> OPEN -> HALF_OPEN -> CLOSED) and bounded TTL cache eviction limits.
+"""
+
 import asyncio
 # pyrefly: ignore [missing-import]
 import pytest
@@ -7,6 +13,7 @@ from tripmate.cache.ttl_cache import BoundedAsyncTTLCache
 
 @pytest.mark.asyncio
 async def test_circuit_breaker_state_transitions():
+    """Tests circuit breaker failure threshold and cooldown state recovery."""
     breaker = CircuitBreaker("test_service", failure_threshold=2, cooldown_seconds=0.5)
 
     async def failing_func():
@@ -40,6 +47,7 @@ async def test_circuit_breaker_state_transitions():
 
 @pytest.mark.asyncio
 async def test_bounded_ttl_cache_eviction():
+    """Tests bounded capacity eviction when maximum entries threshold is reached."""
     cache = BoundedAsyncTTLCache(default_ttl_seconds=3600, max_entries=2)
     await cache.set("ns", "k1", "v1")
     await cache.set("ns", "k2", "v2")

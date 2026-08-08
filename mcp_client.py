@@ -1,3 +1,12 @@
+"""
+MultiServerMCPClient Connection Manager
+
+This module manages connections to all Model Context Protocol (MCP) servers:
+1. Tavily MCP Server (HTTP Streamable transport for live web hotel searches).
+2. AviationStack MCP Server (stdio transport for live flight status and airport data).
+3. Custom Weather FastMCP Server (stdio transport for OpenWeather current & forecast metrics).
+"""
+
 import os
 import shutil
 import sys

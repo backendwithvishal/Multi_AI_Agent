@@ -1,3 +1,9 @@
+"""
+Legacy API Endpoint Test Suite
+
+Verifies root metadata, legacy health probes, empty message validation, and approval feedback validation.
+"""
+
 # pyrefly: ignore [missing-import]
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -6,6 +12,7 @@ from app import app
 
 @pytest.mark.asyncio
 async def test_root_endpoint():
+    """Tests GET / root metadata endpoint."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -18,6 +25,7 @@ async def test_root_endpoint():
 
 @pytest.mark.asyncio
 async def test_health_endpoint():
+    """Tests GET /health operational status endpoint."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -30,6 +38,7 @@ async def test_health_endpoint():
 
 @pytest.mark.asyncio
 async def test_travel_endpoint_empty_message():
+    """Tests validation error when sending empty message to POST /api/travel."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -42,6 +51,7 @@ async def test_travel_endpoint_empty_message():
 
 @pytest.mark.asyncio
 async def test_approve_endpoint_missing_feedback():
+    """Tests validation error when rejecting an itinerary without feedback."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:

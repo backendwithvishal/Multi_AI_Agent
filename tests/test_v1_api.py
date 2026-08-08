@@ -1,3 +1,9 @@
+"""
+Versioned V1 API Route Test Suite
+
+Tests `/api/v1/health`, `/api/v1/liveness`, `/api/v1/readiness`, `/api/v1/travel`, and `/api/v1/travel/approve`.
+"""
+
 # pyrefly: ignore [missing-import]
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -6,6 +12,7 @@ from app import app
 
 @pytest.mark.asyncio
 async def test_v1_health_endpoints():
+    """Tests versioned v1 health, liveness, and readiness probes."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Health telemetry
         resp = await client.get("/api/v1/health")
@@ -27,6 +34,7 @@ async def test_v1_health_endpoints():
 
 @pytest.mark.asyncio
 async def test_v1_travel_validation():
+    """Tests input validation error on empty message prompt for /api/v1/travel."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/v1/travel", json={"message": "   "})
         assert resp.status_code == 422 or resp.status_code == 400
@@ -34,6 +42,7 @@ async def test_v1_travel_validation():
 
 @pytest.mark.asyncio
 async def test_v1_approve_missing_feedback():
+    """Tests validation error when rejecting an itinerary without feedback on /api/v1/travel/approve."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
             "/api/v1/travel/approve",

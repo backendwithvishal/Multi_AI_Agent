@@ -1,8 +1,18 @@
+"""
+Supervisor Agent Module
+
+The Supervisor Agent acts as the central router of the multi-agent system:
+1. Parses the user's travel prompt to extract trip constraints (destination, origin, duration, budget).
+2. Dynamically decides which specialist agents (Flight, Hotel, Weather, Budget) are needed.
+3. Ensures 'itinerary_agent' is always included to produce the final draft plan.
+"""
+
 import json
 from typing import List
 from pydantic import BaseModel, Field
 from langchain_core.messages import SystemMessage, HumanMessage
 
+# Registered specialist agent names
 KNOWN_AGENTS = {
     "flight_agent",
     "hotel_agent",
@@ -11,6 +21,7 @@ KNOWN_AGENTS = {
     "itinerary_agent",
 }
 
+# Deterministic order for executing specialist agents
 AGENT_ORDER = [
     "flight_agent",
     "hotel_agent",
@@ -21,6 +32,7 @@ AGENT_ORDER = [
 
 
 class TripConstraints(BaseModel):
+    """Pydantic model representing extracted travel parameters."""
     destination: str = Field(default="")
     origin: str = Field(default="")
     duration: str = Field(default="")
@@ -30,12 +42,14 @@ class TripConstraints(BaseModel):
 
 
 class SupervisorRouting(BaseModel):
+    """Structured output containing selected agents and trip constraints."""
     selected_agents: List[str] = Field(default_factory=list)
     trip_constraints: TripConstraints = Field(default_factory=TripConstraints)
     reasoning: str = Field(default="")
 
 
 async def run_supervisor_routing(llm, user_query: str) -> SupervisorRouting:
+    """Uses LLM reasoning to extract constraints and pick necessary specialist agents."""
     if not llm:
         return SupervisorRouting(
             selected_agents=AGENT_ORDER.copy(),

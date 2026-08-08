@@ -1,3 +1,12 @@
+"""
+High-Level Travel Planning Service Layer
+
+This service orchestrates all LangGraph workflow executions:
+1. `execute_travel_plan`: Starts a new travel request thread or continues an existing one.
+2. `resume_travel_plan`: Resumes a thread paused for Human-in-the-Loop (HITL) approval.
+3. `stream_travel_events`: Generates Server-Sent Events (SSE) for real-time progress monitoring.
+"""
+
 import json
 import time
 import uuid
@@ -10,6 +19,7 @@ from tripmate.graph.workflow import travel_workflow_graph
 
 
 def _interrupt_payload(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extracts Human-in-the-Loop interrupt payload if workflow is waiting for user review."""
     interrupts = result.get("__interrupt__", [])
     if not interrupts:
         return None
@@ -19,6 +29,7 @@ def _interrupt_payload(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def serialize_graph_result(result: Dict[str, Any], thread_id: str) -> Dict[str, Any]:
+    """Formats internal graph dictionary into clean API response payload."""
     messages = result.get("messages", [])
     last_message = messages[-1].content if messages else ""
     answer = result.get("final_response") or last_message
@@ -59,13 +70,17 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str) -> Dict[str, 
 
 
 class TravelService:
+    """Main service providing clean API interfaces for workflow invocation."""
+
     async def execute_travel_plan(self, user_input: str, thread_id: Optional[str] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Runs the complete multi-agent workflow for a travel query."""
         if not thread_id:
             thread_id = f"user_{uuid.uuid4().hex}"
 
         config = {"configurable": {"thread_id": thread_id}}
         t0 = time.time()
 
+        # Invoke LangGraph state graph
         result = await travel_workflow_graph.ainvoke(
             {
                 "messages": [HumanMessage(content=user_input)],
@@ -96,6 +111,7 @@ class TravelService:
         return serialize_graph_result(result, thread_id)
 
     async def resume_travel_plan(self, thread_id: str, approved: bool, feedback: str = "") -> Dict[str, Any]:
+        """Resumes a paused workflow thread after human approval or revision request."""
         config = {"configurable": {"thread_id": thread_id}}
         result = await travel_workflow_graph.ainvoke(
             Command(
@@ -109,6 +125,7 @@ class TravelService:
         return serialize_graph_result(result, thread_id)
 
     async def stream_travel_events(self, user_input: str, thread_id: str, request_id: str) -> AsyncGenerator[str, None]:
+        """Streams real-time execution progress events using Server-Sent Events (SSE)."""
         yield f"event: workflow.started\ndata: {json.dumps({'thread_id': thread_id, 'request_id': request_id, 'status': 'started'})}\n\n"
         
         try:
@@ -127,4 +144,5 @@ class TravelService:
             yield f"event: workflow.failed\ndata: {json.dumps({'success': False, 'error': str(exc), 'request_id': request_id})}\n\n"
 
 
+# Shared singleton instance
 travel_service = TravelService()

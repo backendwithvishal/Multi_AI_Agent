@@ -1,9 +1,22 @@
+"""
+Specialist AI Agents Module
+
+This file implements domain-specific travel agents:
+- `run_flight_agent`: Queries AviationStack MCP for airports/airlines & recommends flights.
+- `run_hotel_agent`: Queries Tavily Search MCP for hotel accommodations & prices.
+- `run_weather_agent`: Queries OpenWeather MCP for current weather & forecast.
+- `run_budget_agent`: Calculates trip costs, budget feasibility, and savings tips.
+- `run_itinerary_agent`: Synthesizes outputs into a day-by-day draft itinerary for human review.
+- `run_final_agent`: Formats the final approved travel plan response for the client.
+"""
+
 from langchain_core.messages import SystemMessage, HumanMessage
 from tripmate.integrations.mcp import safe_aviation_call, safe_tavily_search, safe_weather_search, safe_extract_destination
 from tripmate.cache.ttl_cache import app_cache
 
 
 async def run_flight_agent(llm, user_query: str) -> str:
+    """Specialist Agent: Fetches flight, airport, and airline details."""
     try:
         airports = await safe_aviation_call("list_airports")
         airlines = await safe_aviation_call("list_airlines")
@@ -30,6 +43,7 @@ Provide flight advice: departure/arrival airport options, airlines, estimated ai
 
 
 async def run_hotel_agent(llm, user_query: str) -> str:
+    """Specialist Agent: Searches hotel options using Tavily MCP."""
     query = f"Best hotels for {user_query}"
     try:
         hotel_data = await app_cache.get_or_set(
@@ -43,6 +57,7 @@ async def run_hotel_agent(llm, user_query: str) -> str:
 
 
 async def run_weather_agent(llm, user_query: str) -> str:
+    """Specialist Agent: Retrieves destination weather using OpenWeather MCP."""
     try:
         city = await safe_extract_destination(user_query)
         weather_data = await app_cache.get_or_set(
@@ -56,6 +71,7 @@ async def run_weather_agent(llm, user_query: str) -> str:
 
 
 async def run_budget_agent(llm, user_query: str, constraints: dict, flight_info: str, hotel_info: str, weather_info: str) -> str:
+    """Specialist Agent: Evaluates budget limits and offers cost optimization tips."""
     if not llm:
         return "Budget Assessment: Trip appears budget-feasible."
 
@@ -81,6 +97,7 @@ Analyze budget feasibility, cost estimates, risk areas, and money-saving tips.
 
 
 async def run_itinerary_agent(llm, user_query: str, constraints: dict, flight_info: str, hotel_info: str, weather_info: str, budget_info: str) -> str:
+    """Specialist Agent: Synthesizes flight, hotel, weather, and budget into a draft itinerary."""
     if not llm:
         return "Draft Itinerary: 5-Day Travel Plan ready for review."
 
@@ -107,6 +124,7 @@ Create a clear, practical day-by-day draft itinerary ready for human review.
 
 
 async def run_final_agent(llm, user_query: str, state_data: dict) -> str:
+    """Specialist Agent: Generates the final polished travel plan after Human-in-the-Loop review."""
     if not llm:
         return state_data.get("itinerary", "Final Polished Travel Plan.")
 

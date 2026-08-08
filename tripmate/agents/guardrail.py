@@ -1,3 +1,11 @@
+"""
+Input Guardrail Safety Module
+
+This module inspects user prompts before any workflow starts:
+1. `deterministic_input_check`: Performs fast string checks (rejects empty/too-short input and common prompt injection attacks like 'drop table' or 'ignore previous instructions').
+2. `run_guardrail_check`: Uses the LLM to verify that the query is relevant to travel planning, blocking non-travel, harmful, or illegal requests.
+"""
+
 import json
 from typing import Tuple
 from pydantic import BaseModel, Field
@@ -10,6 +18,7 @@ class GuardrailDecision(BaseModel):
 
 
 def deterministic_input_check(user_query: str) -> Tuple[bool, str]:
+    """Fast non-LLM safety validation for length and known attack keywords."""
     query = user_query.strip().lower()
     
     if len(query) < 3:
@@ -27,6 +36,7 @@ def deterministic_input_check(user_query: str) -> Tuple[bool, str]:
 
 
 async def run_guardrail_check(llm, user_query: str) -> Tuple[bool, str]:
+    """Evaluates request safety using fast rules first, followed by LLM classification."""
     is_valid, reason = deterministic_input_check(user_query)
     if not is_valid:
         return False, reason

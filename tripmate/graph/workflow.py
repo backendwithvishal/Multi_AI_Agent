@@ -1,3 +1,14 @@
+"""
+LangGraph Workflow Assembly Module
+
+This file constructs the complete multi-agent execution graph:
+1. `supervisor`: Runs input safety guardrail, then routes work to specialist agents.
+2. `parallel_specialists`: Executes Flight, Hotel, and Weather agents in parallel using asyncio.gather.
+3. `itinerary_agent`: Synthesizes gathered data into a day-by-day draft itinerary.
+4. `human_approval`: Triggers a LangGraph state interrupt for Human-in-the-Loop review/approval.
+5. `final_agent`: Formats and finishes the final travel plan response.
+"""
+
 import asyncio
 import time
 from typing import Any, Dict

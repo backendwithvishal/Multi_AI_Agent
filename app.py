@@ -1,3 +1,11 @@
+"""
+FastAPI Application Entry Point
+
+This file initializes the main FastAPI web application instance, configures enterprise HTTP middleware
+(Security Headers, Structured Logging, Request Correlation Tracing, Rate Limiting, and CORS),
+mounts versioned `/api/v1` routers, and exposes root endpoints.
+"""
+
 import json
 import traceback
 import uuid
@@ -21,6 +29,7 @@ from tripmate.api.v1.routes.approval import router as approval_v1_router
 from tripmate.api.v1.routes.health import router as health_v1_router
 from tripmate.services.travel_service import travel_service
 
+# Initialize FastAPI web app
 app = FastAPI(
     title=settings.APP_NAME,
     description=(
@@ -33,6 +42,7 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Register HTTP middleware chain in order of execution
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(RequestIDMiddleware)
@@ -50,6 +60,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount versioned API routes under /api/v1
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(travel_v1_router)
 v1_router.include_router(approval_v1_router)
@@ -57,6 +68,7 @@ v1_router.include_router(health_v1_router)
 app.include_router(v1_router)
 
 
+# Legacy request payload schemas
 class TravelRequest(BaseModel):
     message: str
     thread_id: str | None = None
@@ -68,8 +80,10 @@ class ApprovalRequest(BaseModel):
     feedback: str = ""
 
 
+# Root health & metadata endpoint
 @app.get("/")
 async def root(request: Request):
+    """Root metadata probe describing available endpoints."""
     return {
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
@@ -94,8 +108,10 @@ async def root(request: Request):
     }
 
 
+# Backward-compatibility endpoint aliases
 @app.post("/api/travel")
 async def legacy_travel(request_data: TravelRequest, request: Request):
+    """Legacy endpoint alias for POST /api/v1/travel."""
     user_message = request_data.message.strip()
     if not user_message:
         return JSONResponse(
@@ -108,6 +124,7 @@ async def legacy_travel(request_data: TravelRequest, request: Request):
 
 @app.post("/api/travel/stream")
 async def legacy_travel_stream(request_data: TravelRequest, request: Request):
+    """Legacy endpoint alias for POST /api/v1/travel/stream."""
     user_message = request_data.message.strip()
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
     if not user_message:
@@ -122,6 +139,7 @@ async def legacy_travel_stream(request_data: TravelRequest, request: Request):
 
 @app.post("/api/travel/approve")
 async def legacy_approve(request_data: ApprovalRequest, request: Request):
+    """Legacy endpoint alias for POST /api/v1/travel/approve."""
     if not request_data.approved and not request_data.feedback.strip():
         return JSONResponse(
             status_code=400,
@@ -137,6 +155,7 @@ async def legacy_approve(request_data: ApprovalRequest, request: Request):
 
 @app.get("/health")
 async def legacy_health(request: Request):
+    """Legacy endpoint alias for GET /api/v1/health."""
     return {
         "status": "ok",
         "service": settings.APP_NAME,
