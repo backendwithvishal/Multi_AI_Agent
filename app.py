@@ -60,11 +60,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import os
+from tripmate.api.v1.routes.runs import router as runs_v1_router
+
 # Mount versioned API routes under /api/v1
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(travel_v1_router)
 v1_router.include_router(approval_v1_router)
 v1_router.include_router(health_v1_router)
+v1_router.include_router(runs_v1_router)
 app.include_router(v1_router)
 
 
@@ -93,6 +97,7 @@ async def root(request: Request):
             "travel": "POST /api/v1/travel",
             "travel_stream": "POST /api/v1/travel/stream",
             "travel_approve": "POST /api/v1/travel/approve",
+            "runs": "GET /api/v1/runs/{run_id}",
             "health": "GET /api/v1/health",
             "liveness": "GET /api/v1/liveness",
             "readiness": "GET /api/v1/readiness",
@@ -101,6 +106,7 @@ async def root(request: Request):
             "travel": "POST /api/v1/travel",
             "travel_stream": "POST /api/v1/travel/stream",
             "travel_approve": "POST /api/v1/travel/approve",
+            "runs": "GET /api/v1/runs/{run_id}",
             "health": "GET /api/v1/health",
             "liveness": "GET /api/v1/liveness",
             "readiness": "GET /api/v1/readiness",
@@ -170,9 +176,12 @@ async def legacy_health(request: Request):
             "request_correlation_tracing",
             "ttl_mcp_caching",
             "circuit_breaker_resilience",
+            "observability_runs_api",
         ],
     }
 
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
+

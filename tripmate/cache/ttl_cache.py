@@ -9,6 +9,7 @@ This module provides an in-memory caching engine with:
 
 import asyncio
 import hashlib
+import inspect
 import json
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -97,6 +98,8 @@ class BoundedAsyncTTLCache:
                 val = await coro_func()
             else:
                 val = coro_func()
+                if inspect.isawaitable(val):
+                    val = await val
 
             if val is not None:
                 await self.set(namespace, key_data, val, ttl_seconds)

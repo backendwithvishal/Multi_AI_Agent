@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Response, status
 from tripmate.config.settings import settings
-from tripmate.cache.ttl_cache import app_cache
+from tripmate.cache.redis_cache import hybrid_cache
 from tripmate.database import check_db_health
 
 router = APIRouter(tags=["System Health & Diagnostics"])
@@ -28,9 +28,10 @@ async def health_telemetry(request: Request):
             "request_correlation_tracing",
             "bounded_ttl_mcp_caching",
             "circuit_breaker_resilience",
+            "redis_hybrid_caching",
         ],
         "database": check_db_health(),
-        "cache_stats": app_cache.get_stats(),
+        "cache_stats": hybrid_cache.get_stats(),
     }
 
 

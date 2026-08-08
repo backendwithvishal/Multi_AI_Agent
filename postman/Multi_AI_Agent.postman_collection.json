@@ -129,6 +129,83 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "Observability & Replay API",
+			"item": [
+				{
+					"name": "GET /api/v1/runs/{run_id} (Run Details)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/runs/test_run_id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "runs", "test_run_id"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/runs/{run_id}/metrics (Observability Metrics)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/runs/test_run_id/metrics",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "runs", "test_run_id", "metrics"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/runs/{run_id}/agents (Agent Outputs & Evidence)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/runs/test_run_id/agents",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "runs", "test_run_id", "agents"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/runs/{run_id}/replay (Replay Workflow Execution)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/runs/test_run_id/replay",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "runs", "test_run_id", "replay"]
+						}
+					}
+				}
+			]
 		}
 	],
 	"variable": [

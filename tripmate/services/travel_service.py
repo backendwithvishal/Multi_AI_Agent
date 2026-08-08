@@ -5,6 +5,7 @@ This service orchestrates all LangGraph workflow executions:
 1. `execute_travel_plan`: Starts a new travel request thread or continues an existing one.
 2. `resume_travel_plan`: Resumes a thread paused for Human-in-the-Loop (HITL) approval.
 3. `stream_travel_events`: Generates Server-Sent Events (SSE) for real-time progress monitoring.
+4. Maintains run history in memory for observability, metrics, and workflow replay APIs.
 """
 
 import json
@@ -17,6 +18,9 @@ from langgraph.types import Command
 
 from tripmate.graph.workflow import travel_workflow_graph
 
+# Global in-memory store for workflow run telemetry and replay history
+RUN_STORE: Dict[str, Dict[str, Any]] = {}
+
 
 def _interrupt_payload(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Extracts Human-in-the-Loop interrupt payload if workflow is waiting for user review."""
@@ -28,7 +32,7 @@ def _interrupt_payload(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return payload if isinstance(payload, dict) else {"value": payload}
 
 
-def serialize_graph_result(result: Dict[str, Any], thread_id: str) -> Dict[str, Any]:
+def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optional[str] = None) -> Dict[str, Any]:
     """Formats internal graph dictionary into clean API response payload."""
     messages = result.get("messages", [])
     last_message = messages[-1].content if messages else ""
@@ -38,7 +42,10 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str) -> Dict[str, 
     if interrupt_data:
         answer = interrupt_data.get("draft_itinerary") or result.get("itinerary", "")
 
-    return {
+    effective_run_id = run_id or result.get("run_id") or f"run_{uuid.uuid4().hex[:12]}"
+
+    payload = {
+        "run_id": effective_run_id,
         "thread_id": thread_id,
         "status": result.get("status", "COMPLETED" if not interrupt_data else "WAITING_FOR_APPROVAL"),
         "answer": answer,
@@ -62,11 +69,17 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str) -> Dict[str, 
         "supervisor_reasoning": result.get("supervisor_reasoning", ""),
         "guardrail_allowed": result.get("guardrail_allowed", True),
         "guardrail_reason": result.get("guardrail_reason", ""),
+        "critic_report": result.get("critic_report"),
+        "evidence_items": result.get("evidence_items", []),
+        "structured_outputs": result.get("structured_outputs", {}),
         "approved": result.get("approved"),
         "human_feedback": result.get("human_feedback", ""),
         "llm_calls": result.get("llm_calls", 0),
         "metrics": result.get("metrics", {}),
     }
+
+    RUN_STORE[effective_run_id] = payload
+    return payload
 
 
 class TravelService:
@@ -77,16 +90,17 @@ class TravelService:
         if not thread_id:
             thread_id = f"user_{uuid.uuid4().hex}"
 
+        run_id = f"run_{uuid.uuid4().hex[:12]}"
         config = {"configurable": {"thread_id": thread_id}}
         t0 = time.time()
 
-        # Invoke LangGraph state graph
         result = await travel_workflow_graph.ainvoke(
             {
                 "messages": [HumanMessage(content=user_input)],
                 "user_query": user_input,
                 "user_id": user_id,
                 "thread_id": thread_id,
+                "run_id": run_id,
                 "status": "RUNNING",
                 "guardrail_allowed": True,
                 "guardrail_reason": "",
@@ -102,13 +116,16 @@ class TravelService:
                 "approved": False,
                 "human_feedback": "",
                 "final_response": "",
+                "structured_outputs": {},
+                "evidence_items": [],
+                "critic_report": {},
                 "llm_calls": 0,
                 "start_time": t0,
                 "metrics": {"agent_latencies": {}, "total_latency_ms": 0.0},
             },
             config=config,
         )
-        return serialize_graph_result(result, thread_id)
+        return serialize_graph_result(result, thread_id, run_id=run_id)
 
     async def resume_travel_plan(self, thread_id: str, approved: bool, feedback: str = "") -> Dict[str, Any]:
         """Resumes a paused workflow thread after human approval or revision request."""
