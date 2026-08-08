@@ -217,6 +217,7 @@ async def health_check(request: Request):
         "version": app.version,
         "request_id": getattr(request.state, "request_id", None),
         "features": [
+            "supervisor_agent",
             "parallel_supervisor_agent",
             "pydantic_output_guardrail",
             "human_in_the_loop",

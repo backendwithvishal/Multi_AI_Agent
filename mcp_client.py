@@ -65,10 +65,13 @@ def _subprocess_env(**updates: str | None) -> dict[str, str]:
 # LLM
 # =========================================================
 
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    api_key=_require_env("GROQ_API_KEY", GROQ_API_KEY),
-)
+if GROQ_API_KEY:
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        api_key=GROQ_API_KEY,
+    )
+else:
+    llm = None
 
 
 # =========================================================
@@ -298,6 +301,9 @@ async def forecast_mcp_search(city: str):
 # =========================================================
 
 async def extract_destination(query: str) -> str:
+    if not llm:
+        raise RuntimeError("GROQ_API_KEY is missing. Add GROQ_API_KEY=your_key to .env file.")
+
     prompt = f"""
 Extract only the destination city or country from the travel request.
 
