@@ -20,6 +20,12 @@ services:
         sync: false
       - key: AVIATIONSTACK_API_KEY
         sync: false
+      - key: LANGCHAIN_TRACING_V2
+        sync: false
+      - key: LANGCHAIN_API_KEY
+        sync: false
+      - key: LANGCHAIN_PROJECT
+        value: tripmate-ai
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL

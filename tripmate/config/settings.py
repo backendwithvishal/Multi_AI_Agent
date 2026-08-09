@@ -47,6 +47,18 @@ class Settings:
             or os.getenv("AVIATION_STACK_API_KEY", "")
         ).strip()
 
+        # LangSmith Observability & Tracing settings
+        self.LANGCHAIN_TRACING_V2: str = os.getenv("LANGCHAIN_TRACING_V2", "false").strip()
+        self.LANGCHAIN_API_KEY: str = os.getenv("LANGCHAIN_API_KEY", "").strip()
+        self.LANGCHAIN_PROJECT: str = os.getenv("LANGCHAIN_PROJECT", "tripmate-ai").strip()
+        self.LANGCHAIN_ENDPOINT: str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com").strip()
+
+        if self.LANGCHAIN_API_KEY and self.LANGCHAIN_TRACING_V2.lower() == "true":
+            os.environ["LANGCHAIN_TRACING_V2"] = "true"
+            os.environ["LANGCHAIN_API_KEY"] = self.LANGCHAIN_API_KEY
+            os.environ["LANGCHAIN_PROJECT"] = self.LANGCHAIN_PROJECT
+            os.environ["LANGCHAIN_ENDPOINT"] = self.LANGCHAIN_ENDPOINT
+
         # PostgreSQL Database Connection String
         self.DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL", "").strip() or None
 
