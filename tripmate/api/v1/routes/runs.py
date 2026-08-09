@@ -31,7 +31,7 @@ async def get_run_details(
     request_id = getattr(request.state, "request_id", "unknown")
     run_data = RUN_STORE.get(run_id)
     if not run_data:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "RUN_NOT_FOUND", "message": f"Run ID '{run_id}' not found."},
         )
