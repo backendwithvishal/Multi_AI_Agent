@@ -40,6 +40,7 @@ class Settings:
 
         # External API Keys for AI & MCP services
         self.GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "").strip()
+        self.OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "").strip()
         self.TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "").strip()
         self.OPENWEATHER_API_KEY: str = os.getenv("OPENWEATHER_API_KEY", "").strip()
         self.AVIATIONSTACK_API_KEY: str = (
@@ -65,7 +66,7 @@ class Settings:
         # Performance & Rate Limits
         self.CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
         self.CACHE_MAX_ENTRIES: int = int(os.getenv("CACHE_MAX_ENTRIES", "1000"))
-        self.RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "30"))
+        self.RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "500"))
         self.RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
         # External Service Timeouts (Seconds)

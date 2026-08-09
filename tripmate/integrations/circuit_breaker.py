@@ -74,6 +74,12 @@ class CircuitBreaker:
                 self.failure_count = 0
         return result
 
+    def reset(self) -> None:
+        """Manually resets circuit breaker to CLOSED state and clears failure counters."""
+        self.state = CircuitState.CLOSED
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+
     def get_status(self) -> Dict[str, Any]:
         """Returns diagnostic telemetry for the circuit breaker."""
         return {
@@ -82,3 +88,4 @@ class CircuitBreaker:
             "failure_count": self.failure_count,
             "last_failure_time": self.last_failure_time,
         }
+

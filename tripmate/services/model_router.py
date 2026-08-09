@@ -24,7 +24,7 @@ class ModelRouter:
 
     def __init__(self):
         self.groq_api_key = settings.GROQ_API_KEY
-        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        self.openrouter_api_key = settings.OPENROUTER_API_KEY
 
     def get_model(self, tier: ModelTier = ModelTier.REASONING) -> Optional[Any]:
         """Returns initialized LLM instance for specified performance tier."""

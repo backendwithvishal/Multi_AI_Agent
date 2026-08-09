@@ -2,45 +2,45 @@
 	"info": {
 		"_postman_id": "a7e1f4b8-392a-4c28-9d8e-123456789abc",
 		"name": "TripMate AI Multi-Agent Backend API",
-		"description": "Postman API Collection for TripMate AI Multi-Agent Travel Planner Engine.",
+		"description": "Postman API Collection covering all 10 domain backend API modules for TripMate AI Multi-Agent Platform.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
-			"name": "System Health & Diagnostics",
+			"name": "1. Health & Diagnostics",
 			"item": [
 				{
-					"name": "GET /api/v1/health",
+					"name": "GET /api/v1/health (Detailed Health Telemetry)",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/health",
-							"host": ["{{base_url}}"],
+							"raw": "{{baseUrl}}/api/v1/health",
+							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "health"]
 						}
 					}
 				},
 				{
-					"name": "GET /api/v1/liveness",
+					"name": "GET /api/v1/liveness (Process Liveness Probe)",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/liveness",
-							"host": ["{{base_url}}"],
+							"raw": "{{baseUrl}}/api/v1/liveness",
+							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "liveness"]
 						}
 					}
 				},
 				{
-					"name": "GET /api/v1/readiness",
+					"name": "GET /api/v1/readiness (Service Readiness Probe)",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/v1/readiness",
-							"host": ["{{base_url}}"],
+							"raw": "{{baseUrl}}/api/v1/readiness",
+							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "readiness"]
 						}
 					}
@@ -48,56 +48,468 @@
 			]
 		},
 		{
-			"name": "Multi-Agent Workflows",
+			"name": "2. Status & Telemetry",
 			"item": [
 				{
-					"name": "POST /api/v1/travel (Create Plan)",
+					"name": "GET /api/v1/status (Operational Telemetry & Status)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "status"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3. AI Analysis",
+			"item": [
+				{
+					"name": "POST /api/v1/ai/analysis (Analyze Travel Plan & Feasibility)",
 					"request": {
 						"method": "POST",
 						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"Plan a 5-day trip to Tokyo under $2000 with cultural sights\",\n  \"budget\": 2000.0,\n  \"destination\": \"Tokyo\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/analysis",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "ai", "analysis"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Authentication & Identity",
+			"item": [
+				{
+					"name": "POST /api/v1/auth/register (Register Account)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"jane_traveler\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"role\": \"user\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/auth/login (User Login)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username_or_email\": \"jane_traveler\",\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/auth/me (Current User Profile)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/me",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "me"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "5. Travel Watchlists",
+			"item": [
+				{
+					"name": "GET /api/v1/watchlists (List Watchlists)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/watchlists",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "watchlists"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/watchlists (Create Watchlist Item)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Paris Summer Flights\",\n  \"target_type\": \"flight\",\n  \"target_value\": \"JFK-CDG\",\n  \"threshold_price\": 750.0,\n  \"notes\": \"Direct flight preference\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/watchlists",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "watchlists"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/watchlists/{id} (Get Watchlist Details)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/watchlists/{{watchlistId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "watchlists", "{{watchlistId}}"]
+						}
+					}
+				},
+				{
+					"name": "DELETE /api/v1/watchlists/{id} (Delete Watchlist Item)",
+					"request": {
+						"method": "DELETE",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/watchlists/{{watchlistId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "watchlists", "{{watchlistId}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "6. Alerts & Notifications",
+			"item": [
+				{
+					"name": "GET /api/v1/alerts (List Active Alerts)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/alerts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "alerts"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/alerts (Create Alert Rule)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Price Drop Alert: JFK-CDG\",\n  \"message\": \"Airfare dropped to $690!\",\n  \"alert_type\": \"price_drop\",\n  \"severity\": \"info\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/alerts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "alerts"]
+						}
+					}
+				},
+				{
+					"name": "PUT /api/v1/alerts/{id}/read (Mark Alert Read)",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/alerts/{{alertId}}/read",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "alerts", "{{alertId}}", "read"]
+						}
+					}
+				},
+				{
+					"name": "DELETE /api/v1/alerts/{id} (Delete Alert)",
+					"request": {
+						"method": "DELETE",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/alerts/{{alertId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "alerts", "{{alertId}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "7. Travel Assets & Documents",
+			"item": [
+				{
+					"name": "GET /api/v1/assets (List Travel Assets)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/assets",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "assets"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/assets (Create / Attach Asset)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"E-Ticket: Air France AF007\",\n  \"asset_type\": \"ticket\",\n  \"trip_id\": \"trip_paris_101\",\n  \"content_uri\": \"https://storage.tripmate.ai/tickets/af007.pdf\",\n  \"metadata\": {\"booking_ref\": \"AF-887766\"}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/assets",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "assets"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/assets/{id} (Get Asset Details)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/assets/{{assetId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "assets", "{{assetId}}"]
+						}
+					}
+				},
+				{
+					"name": "DELETE /api/v1/assets/{id} (Delete Asset)",
+					"request": {
+						"method": "DELETE",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/assets/{{assetId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "assets", "{{assetId}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "8. Financial Engine (Deterministic)",
+			"item": [
+				{
+					"name": "POST /api/v1/financial/calculate (Itemized Cost Breakdown)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"flight_estimate\": 750.0,\n  \"hotel_nightly_rate\": 180.0,\n  \"nights\": 5,\n  \"daily_food_allowance\": 60.0,\n  \"activities_budget\": 300.0,\n  \"tax_rate_pct\": 12.0,\n  \"contingency_buffer_pct\": 10.0,\n  \"currency\": \"USD\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/financial/calculate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "financial", "calculate"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/financial/convert (Currency Converter)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": 1500.0,\n  \"from_currency\": \"USD\",\n  \"to_currency\": \"EUR\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/financial/convert",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "financial", "convert"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/financial/budget-analysis (Budget Variance)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"target_budget\": 2500.0,\n  \"estimated_total\": 2350.0,\n  \"currency\": \"USD\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/financial/budget-analysis",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "financial", "budget-analysis"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "9. Platform Administration (RBAC)",
+			"item": [
+				{
+					"name": "GET /api/v1/admin/stats (Platform Operational Statistics)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/stats",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "stats"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/admin/users (List Registered Users)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/admin/circuit-breakers/{name}/reset (Reset Breaker)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/circuit-breakers/tavily_api/reset",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "circuit-breakers", "tavily_api", "reset"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/admin/cache/clear (Purge Cache)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/cache/clear",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "cache", "clear"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/admin/runs (Audit Workflow Executions)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/runs",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "runs"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "10. AI Orchestration & Travel Planning",
+			"item": [
+				{
+					"name": "POST /api/v1/ai/plan (Generate Dynamic Task DAG)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"Plan a 5-day cultural trip to Kyoto with traditional tea houses\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/plan",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "ai", "plan"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/ai/agents/{name}/invoke (Direct Agent Execution)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"agent_name\": \"budget_agent\",\n  \"query\": \"Evaluate $2500 budget for 5 days in Paris\",\n  \"context\": {\"flight_info\": \"$800\", \"hotel_info\": \"$200/night\"}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/agents/budget_agent/invoke",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "ai", "agents", "budget_agent", "invoke"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/travel (Full Workflow Execution)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"message\": \"Plan a 5-day trip to Paris under $2000\",\n  \"thread_id\": \"test_thread_101\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/travel",
-							"host": ["{{base_url}}"],
+							"raw": "{{baseUrl}}/api/v1/travel",
+							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "travel"]
 						}
 					}
 				},
 				{
-					"name": "POST /api/v1/travel/stream (SSE Events)",
+					"name": "POST /api/v1/travel/stream (SSE Event Streaming)",
 					"request": {
 						"method": "POST",
 						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"message\": \"Plan a 3-day trip to Tokyo\",\n  \"thread_id\": \"test_thread_102\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/travel/stream",
-							"host": ["{{base_url}}"],
+							"raw": "{{baseUrl}}/api/v1/travel/stream",
+							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "travel", "stream"]
 						}
 					}
@@ -107,101 +519,29 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"thread_id\": \"test_thread_101\",\n  \"approved\": true,\n  \"feedback\": \"Itinerary looks great!\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/api/v1/travel/approve",
-							"host": ["{{base_url}}"],
+							"raw": "{{baseUrl}}/api/v1/travel/approve",
+							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "travel", "approve"]
 						}
 					}
-				}
-			]
-		},
-		{
-			"name": "Observability & Replay API",
-			"item": [
+				},
 				{
-					"name": "GET /api/v1/runs/{run_id} (Run Details)",
+					"name": "GET /api/v1/runs/{run_id} (Run Details & Observability)",
 					"request": {
 						"method": "GET",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
-						],
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
 						"url": {
-							"raw": "{{base_url}}/api/v1/runs/test_run_id",
-							"host": ["{{base_url}}"],
+							"raw": "{{baseUrl}}/api/v1/runs/test_run_id",
+							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "runs", "test_run_id"]
-						}
-					}
-				},
-				{
-					"name": "GET /api/v1/runs/{run_id}/metrics (Observability Metrics)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/runs/test_run_id/metrics",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "runs", "test_run_id", "metrics"]
-						}
-					}
-				},
-				{
-					"name": "GET /api/v1/runs/{run_id}/agents (Agent Outputs & Evidence)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/runs/test_run_id/agents",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "runs", "test_run_id", "agents"]
-						}
-					}
-				},
-				{
-					"name": "POST /api/v1/runs/{run_id}/replay (Replay Workflow Execution)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/runs/test_run_id/replay",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "runs", "test_run_id", "replay"]
 						}
 					}
 				}
@@ -209,13 +549,11 @@
 		}
 	],
 	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://127.0.0.1:8000"
-		},
-		{
-			"key": "api_key",
-			"value": "tm_sec_key_8f9a2b4c6d8e1f3a5b7c9d2e4f6a8b1c"
-		}
+		{ "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+		{ "key": "accessToken", "value": "" },
+		{ "key": "adminAccessToken", "value": "" },
+		{ "key": "watchlistId", "value": "wl_sample_123" },
+		{ "key": "alertId", "value": "alt_sample_123" },
+		{ "key": "assetId", "value": "ast_sample_123" }
 	]
 }
