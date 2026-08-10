@@ -64,7 +64,7 @@ class RedisHybridCache:
             try:
                 cache_key = self.in_memory._hash_key(namespace, key_data)
                 ttl = ttl_seconds or self.in_memory.default_ttl
-                serialized = json.dumps(value, default=str) if not isinstance(value, str) else value
+                serialized = json.dumps(value, default=str)
                 await self._redis_client.set(cache_key, serialized, ex=ttl)
             except Exception:
                 pass
@@ -93,7 +93,7 @@ class RedisHybridCache:
                 try:
                     cache_key = self.in_memory._hash_key(namespace, key_data)
                     ttl = ttl_seconds or self.in_memory.default_ttl
-                    serialized = json.dumps(res, default=str) if not isinstance(res, str) else res
+                    serialized = json.dumps(res, default=str)
                     await self._redis_client.set(cache_key, serialized, ex=ttl)
                 except Exception:
                     pass

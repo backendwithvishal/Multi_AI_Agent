@@ -116,6 +116,25 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+@app.exception_handler(Exception)
+async def global_unhandled_exception_handler(request: Request, exc: Exception):
+    # Catch-all exception handler to prevent leaking stack traces or sensitive details to users
+    request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=APIResponse(
+            success=False,
+            data=None,
+            error=ErrorDetail(
+                code="INTERNAL_SERVER_ERROR",
+                message="An unexpected internal error occurred. Please try again later.",
+            ),
+            request_id=request_id,
+        ).model_dump(),
+    )
+
+
+
 # =========================================================
 # Mount Versioned API Routes (/api/v1)
 # =========================================================

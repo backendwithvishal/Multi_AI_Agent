@@ -124,9 +124,9 @@ async def parallel_specialists_node(state: TravelState):
             updates[key] = f"Provider unavailable: {res}"
         else:
             updates[key] = str(res.result)
-            structured_map[agent_name] = res.model_dump()
+            structured_map[agent_name] = res.model_dump(mode="json")
             for src in res.sources:
-                evidence_list.append(src.model_dump())
+                evidence_list.append(src.model_dump(mode="json"))
 
     if "budget_agent" in selected:
         constraints = state.get("trip_constraints", {})
@@ -141,9 +141,9 @@ async def parallel_specialists_node(state: TravelState):
             },
         )
         updates["budget_results"] = str(budget_output.result)
-        structured_map["budget_agent"] = budget_output.model_dump()
+        structured_map["budget_agent"] = budget_output.model_dump(mode="json")
         for src in budget_output.sources:
-            evidence_list.append(src.model_dump())
+            evidence_list.append(src.model_dump(mode="json"))
 
     _update_latency(metrics, "parallel_specialists", (time.time() - t0) * 1000)
     _update_latency(metrics, "parallel_specialists_total", (time.time() - t0) * 1000)
@@ -176,7 +176,7 @@ async def critic_node(state: TravelState):
 
     _update_latency(metrics, "critic_agent", (time.time() - t0) * 1000)
     return {
-        "critic_report": report.model_dump(),
+        "critic_report": report.model_dump(mode="json"),
         "metrics": metrics,
     }
 

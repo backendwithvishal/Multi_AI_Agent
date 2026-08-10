@@ -28,11 +28,12 @@ REQUEST_TIMEOUT_SECONDS = 20
 
 def _get_api_key() -> str:
     """Validates presence of OpenWeather API key."""
-    if not OPENWEATHER_API_KEY:
+    key = os.getenv("OPENWEATHER_API_KEY")
+    if not key or not key.strip():
         raise RuntimeError(
             "OPENWEATHER_API_KEY is missing from the project .env file."
         )
-    return OPENWEATHER_API_KEY
+    return key.strip()
 
 
 def _request_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
