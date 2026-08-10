@@ -19,13 +19,32 @@ from tripmate.config.settings import settings
 
 
 def get_formatted_db_url() -> Optional[str]:
+    """
+    Returns the database connection URL formatted with appropriate SSL parameters.
+    
+    - If `sslmode` is explicitly set in `DATABASE_URL`, respects the provided parameter.
+    - For local development and Docker container networks (e.g. `localhost`, `127.0.0.1`, `postgres_db`),
+      does not force `sslmode=require` since standard local PostgreSQL instances do not enable SSL by default.
+    - For production cloud databases, defaults to `sslmode=require` if not explicitly specified.
+    """
     url = settings.DATABASE_URL
     if not url:
         return None
-    if "sslmode=" not in url:
-        separator = "&" if "?" in url else "?"
-        url = f"{url}{separator}sslmode=require"
-    return url
+    if "sslmode=" in url:
+        return url
+
+    lower_url = url.lower()
+    if (
+        settings.APP_ENV == "development"
+        or "localhost" in lower_url
+        or "127.0.0.1" in lower_url
+        or "postgres_db" in lower_url
+        or "@postgres" in lower_url
+    ):
+        return url
+
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}sslmode=require"
 
 
 def check_db_health() -> Dict[str, Any]:
