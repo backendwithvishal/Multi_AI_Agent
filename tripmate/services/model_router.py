@@ -26,7 +26,7 @@ class ModelTier(str, Enum):
 
 
 class ModelRouter:
-    """Manages LLM provider routing for Groq and OpenRouter tiers."""
+    """Manages LLM provider routing with fallback across Groq, OpenRouter, and Hugging Face."""
 
     @property
     def groq_api_key(self) -> Optional[str]:
@@ -36,9 +36,18 @@ class ModelRouter:
     def openrouter_api_key(self) -> Optional[str]:
         return (settings.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY") or "").strip() or None
 
+    @property
+    def huggingface_api_key(self) -> Optional[str]:
+        return (
+            settings.HUGGINGFACE_API_KEY
+            or os.getenv("HUGGINGFACE_API_KEY")
+            or os.getenv("HUGGING_FACE_API_KEY")
+            or ""
+        ).strip() or None
+
     def has_active_provider(self) -> bool:
         """Returns True if at least one LLM provider key is configured."""
-        return bool(self.groq_api_key or self.openrouter_api_key)
+        return bool(self.groq_api_key or self.openrouter_api_key or self.huggingface_api_key)
 
     def get_active_provider_name(self) -> Optional[str]:
         """Returns the identifier of the primary active LLM provider."""
@@ -46,17 +55,20 @@ class ModelRouter:
             return "groq"
         if self.openrouter_api_key:
             return "openrouter"
+        if self.huggingface_api_key:
+            return "huggingface"
         return None
 
     def get_model(self, tier: ModelTier = ModelTier.REASONING) -> Optional[Any]:
-        """Returns an initialized LLM instance for specified performance tier with dynamic fallback."""
+        """Returns an initialized LLM instance with dynamic fallback across providers."""
         # Refresh environment settings in case .env was updated at runtime
         load_dotenv(BASE_DIR / ".env", override=False)
 
         groq_key = self.groq_api_key
         openrouter_key = self.openrouter_api_key
+        hf_key = self.huggingface_api_key
 
-        if not groq_key and not openrouter_key:
+        if not groq_key and not openrouter_key and not hf_key:
             return None
 
         # 1. Primary Provider: Groq API
@@ -77,7 +89,7 @@ class ModelRouter:
             except Exception as exc:
                 print(f"ModelRouter Groq initialization notice: {exc}")
 
-        # 2. Fallback Provider: OpenRouter API
+        # 2. Secondary Provider: OpenRouter API
         if openrouter_key:
             if tier == ModelTier.FAST:
                 openrouter_model = os.getenv(
@@ -91,26 +103,29 @@ class ModelRouter:
                 )
 
             try:
-                from langchain_groq import ChatGroq
+                from langchain_community.chat_models import ChatOpenAI
                 return ChatOpenAI(
-                    model=openrouter_model,
-                    api_key=openrouter_key,
-                    base_url="https://openrouter.ai/api/v1",
-                    timeout=settings.LLM_TIMEOUT_SECONDS,
+                    model_name=openrouter_model,
+                    openai_api_key=openrouter_key,
+                    openai_api_base="https://openrouter.ai/api/v1",
+                    request_timeout=settings.LLM_TIMEOUT_SECONDS,
                 )
-            except ImportError:
-                try:
-                    from langchain_community.chat_models import ChatOpenAI
-                    return ChatOpenAI(
-                        model_name=openrouter_model,
-                        openai_api_key=openrouter_key,
-                        openai_api_base="https://openrouter.ai/api/v1",
-                        request_timeout=settings.LLM_TIMEOUT_SECONDS,
-                    )
-                except Exception as exc:
-                    print(f"ModelRouter OpenRouter initialization notice: {exc}")
             except Exception as exc:
                 print(f"ModelRouter OpenRouter initialization notice: {exc}")
+
+        # 3. Tertiary Provider: Hugging Face API
+        if hf_key:
+            hf_model = os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+            try:
+                from langchain_community.chat_models import ChatOpenAI
+                return ChatOpenAI(
+                    model_name=hf_model,
+                    openai_api_key=hf_key,
+                    openai_api_base="https://api-inference.huggingface.co/v1",
+                    request_timeout=settings.LLM_TIMEOUT_SECONDS,
+                )
+            except Exception as exc:
+                print(f"ModelRouter Hugging Face initialization notice: {exc}")
 
         return None
 

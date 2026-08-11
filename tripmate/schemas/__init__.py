@@ -120,6 +120,25 @@ class UserProfile(BaseModel):
     created_at: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def strip_email(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_token: Optional[str] = Field(default=None, description="Reset token provided for API testing/development environment.")
+
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6, max_length=100)
+
+
 # =========================================================
 # 5. Watchlists Schemas
 # =========================================================

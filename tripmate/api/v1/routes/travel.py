@@ -1,10 +1,11 @@
 import uuid
-from fastapi import APIRouter, Depends, Request
+from typing import Any, Dict
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from tripmate.schemas import TravelRequest, APIResponse, ErrorDetail
 from tripmate.services.travel_service import travel_service
-from tripmate.api.dependencies import verify_api_key
+from tripmate.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/travel", tags=["Travel Multi-Agent API"])
 
@@ -18,14 +19,15 @@ router = APIRouter(prefix="/travel", tags=["Travel Multi-Agent API"])
 async def create_travel_plan(
     request_data: TravelRequest,
     request: Request,
-    user_identity: str = Depends(verify_api_key),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
+    effective_user_id = request_data.user_id or current_user.get("id")
     try:
         result = await travel_service.execute_travel_plan(
             user_input=request_data.message,
             thread_id=request_data.thread_id,
-            user_id=request_data.user_id,
+            user_id=effective_user_id,
         )
         return APIResponse(
             success=True,
@@ -33,7 +35,10 @@ async def create_travel_plan(
             error=None,
             request_id=request_id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
+        err_msg = str(exc).strip() or "An unexpected error occurred during travel plan execution."
         return JSONResponse(
             status_code=500,
             content=APIResponse(
@@ -41,7 +46,7 @@ async def create_travel_plan(
                 data=None,
                 error=ErrorDetail(
                     code="TRAVEL_WORKFLOW_ERROR",
-                    message=f"An unexpected internal error occurred: {exc}",
+                    message=err_msg,
                 ),
                 request_id=request_id,
             ).model_dump(),
@@ -56,14 +61,16 @@ async def create_travel_plan(
 async def stream_travel_plan(
     request_data: TravelRequest,
     request: Request,
-    user_identity: str = Depends(verify_api_key),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
     thread_id = request_data.thread_id or f"user_{uuid.uuid4().hex}"
+    effective_user_id = request_data.user_id or current_user.get("id")
 
     generator = travel_service.stream_travel_events(
         user_input=request_data.message,
         thread_id=thread_id,
         request_id=request_id,
+        user_id=effective_user_id,
     )
     return StreamingResponse(generator, media_type="text/event-stream")

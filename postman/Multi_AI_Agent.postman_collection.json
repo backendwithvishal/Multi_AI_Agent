@@ -93,6 +93,20 @@
 			"item": [
 				{
 					"name": "POST /api/v1/auth/register (Register Account)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.access_token) {",
+									"    pm.environment.set(\"accessToken\", jsonData.data.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -109,6 +123,20 @@
 				},
 				{
 					"name": "POST /api/v1/auth/login (User Login)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.access_token) {",
+									"    pm.environment.set(\"accessToken\", jsonData.data.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -120,6 +148,52 @@
 							"raw": "{{baseUrl}}/api/v1/auth/login",
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/auth/forgot-password (Request Password Reset)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.reset_token) {",
+									"    pm.environment.set(\"resetToken\", jsonData.data.reset_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"jane@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "forgot-password"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/auth/reset-password (Reset Password)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reset_token\": \"{{resetToken}}\",\n  \"new_password\": \"NewSecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/reset-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "reset-password"]
 						}
 					}
 				},
@@ -154,6 +228,20 @@
 				},
 				{
 					"name": "POST /api/v1/watchlists (Create Watchlist Item)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.id) {",
+									"    pm.environment.set(\"watchlistId\", jsonData.data.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -214,6 +302,20 @@
 				},
 				{
 					"name": "POST /api/v1/alerts (Create Alert Rule)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.id) {",
+									"    pm.environment.set(\"alertId\", jsonData.data.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -274,6 +376,20 @@
 				},
 				{
 					"name": "POST /api/v1/assets (Create / Attach Asset)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.id) {",
+									"    pm.environment.set(\"assetId\", jsonData.data.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -324,7 +440,10 @@
 					"name": "POST /api/v1/financial/calculate (Itemized Cost Breakdown)",
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"flight_estimate\": 750.0,\n  \"hotel_nightly_rate\": 180.0,\n  \"nights\": 5,\n  \"daily_food_allowance\": 60.0,\n  \"activities_budget\": 300.0,\n  \"tax_rate_pct\": 12.0,\n  \"contingency_buffer_pct\": 10.0,\n  \"currency\": \"USD\"\n}"
@@ -340,7 +459,10 @@
 					"name": "POST /api/v1/financial/convert (Currency Converter)",
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"amount\": 1500.0,\n  \"from_currency\": \"USD\",\n  \"to_currency\": \"EUR\"\n}"
@@ -356,7 +478,10 @@
 					"name": "POST /api/v1/financial/budget-analysis (Budget Variance)",
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"target_budget\": 2500.0,\n  \"estimated_total\": 2350.0,\n  \"currency\": \"USD\"\n}"
@@ -390,6 +515,25 @@
 					"request": {
 						"method": "GET",
 						"header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/users",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "admin", "users"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/admin/users (Provision User / Admin Account)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"test_admin_2\",\n  \"email\": \"admin2@tripmate.ai\",\n  \"password\": \"AdminPass123!\",\n  \"role\": \"admin\"\n}"
+						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/admin/users",
 							"host": ["{{baseUrl}}"],

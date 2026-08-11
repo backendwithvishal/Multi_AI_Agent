@@ -145,5 +145,17 @@ async def require_admin(
 
 
 async def validate_thread_ownership(thread_id: str, request_user_id: Optional[str] = None) -> bool:
-    """Dependency validating user authorization for a specific thread ID."""
+    """Validates user authorization and thread ownership for a specific thread ID."""
+    if not thread_id or not request_user_id:
+        return True
+
+    registered_owner = store.get_thread_owner(thread_id)
+    if registered_owner and registered_owner != request_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "FORBIDDEN",
+                "message": f"User is not authorized to access or modify thread '{thread_id}'.",
+            },
+        )
     return True

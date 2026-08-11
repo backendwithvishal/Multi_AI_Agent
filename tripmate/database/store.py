@@ -101,6 +101,8 @@ class DataStore:
         self._watchlists: Dict[str, Dict[str, Any]] = {}
         self._alerts: Dict[str, Dict[str, Any]] = {}
         self._assets: Dict[str, Dict[str, Any]] = {}
+        self._reset_tokens: Dict[str, Dict[str, Any]] = {}
+        self._thread_owners: Dict[str, str] = {}
         self._start_time = time.time()
         self._seed_initial_data()
 
@@ -126,7 +128,7 @@ class DataStore:
         }
 
     # -----------------------------------------------------
-    # User Operations
+    # User & Account Recovery Operations
     # -----------------------------------------------------
     def create_user(self, username: str, email: str, password_hash: str, role: str = "user") -> Dict[str, Any]:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
@@ -153,6 +155,49 @@ class DataStore:
 
     def list_users(self) -> List[Dict[str, Any]]:
         return list(self._users.values())
+
+    def create_password_reset_token(self, email: str) -> Optional[str]:
+        """Creates a single-use password reset token with 15-minute expiration."""
+        user = self.get_user_by_username_or_email(email)
+        if not user:
+            return None
+        
+        token = f"rst_{secrets.token_hex(20)}"
+        self._reset_tokens[token] = {
+            "token": token,
+            "user_id": user["id"],
+            "expires_at": time.time() + 900,  # 15 minutes
+            "used": False,
+        }
+        return token
+
+    def verify_and_consume_reset_token(self, token: str, new_password_hash: str) -> bool:
+        """Validates token expiration and single-use status, then updates user password."""
+        token_data = self._reset_tokens.get(token)
+        if not token_data:
+            return False
+        if token_data["used"] or token_data["expires_at"] < time.time():
+            return False
+
+        user = self._users.get(token_data["user_id"])
+        if not user:
+            return False
+
+        user["password_hash"] = new_password_hash
+        token_data["used"] = True
+        return True
+
+    # -----------------------------------------------------
+    # Thread Ownership Registry
+    # -----------------------------------------------------
+    def register_thread_owner(self, thread_id: str, user_id: str) -> None:
+        """Registers the owner user_id for a given conversation thread_id."""
+        if thread_id and user_id:
+            self._thread_owners[thread_id] = user_id
+
+    def get_thread_owner(self, thread_id: str) -> Optional[str]:
+        """Returns the registered user_id for a thread_id."""
+        return self._thread_owners.get(thread_id)
 
     # -----------------------------------------------------
     # Watchlist Operations

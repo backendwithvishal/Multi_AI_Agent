@@ -275,7 +275,7 @@ async def test_financial_module():
 
 
 @pytest.mark.asyncio
-async def test_admin_module_rbac():
+async def test_admin_module_rbac(monkeypatch):
     """Tests Module 9 (Admin Management & RBAC)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Register a non-admin user
@@ -298,7 +298,8 @@ async def test_admin_module_rbac():
         assert resp_forbidden.status_code == 403
         assert resp_forbidden.json()["error"]["code"] == "FORBIDDEN"
 
-        # Register an admin user
+        # Register an admin user with admin secret header
+        monkeypatch.setattr(settings, "ADMIN_REGISTRATION_SECRET", "test_secret_key_123")
         reg_admin = await client.post(
             "/api/v1/auth/register",
             json={
@@ -307,6 +308,7 @@ async def test_admin_module_rbac():
                 "password": "AdminPassword123!",
                 "role": "admin",
             },
+            headers={"X-Admin-Secret": "test_secret_key_123"},
         )
         admin_token = reg_admin.json()["data"]["access_token"]
 

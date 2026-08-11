@@ -90,6 +90,7 @@ class Settings:
 
         # Security & Authentication settings
         self.API_KEY: Optional[str] = _parse_str("API_KEY") or None
+        self.ADMIN_REGISTRATION_SECRET: Optional[str] = _parse_str("ADMIN_REGISTRATION_SECRET") or None
         self.AUTH_REQUIRED: bool = (
             _parse_bool("AUTH_REQUIRED", False)
             or self.APP_ENV == "production"
@@ -99,6 +100,10 @@ class Settings:
         # External API Keys for AI & MCP services
         self.GROQ_API_KEY: str = _parse_str("GROQ_API_KEY")
         self.OPENROUTER_API_KEY: str = _parse_str("OPENROUTER_API_KEY")
+        self.HUGGINGFACE_API_KEY: str = (
+            _parse_str("HUGGINGFACE_API_KEY")
+            or _parse_str("HUGGING_FACE_API_KEY")
+        )
         self.TAVILY_API_KEY: str = _parse_str("TAVILY_API_KEY")
         self.OPENWEATHER_API_KEY: str = _parse_str("OPENWEATHER_API_KEY")
         self.AVIATIONSTACK_API_KEY: str = (

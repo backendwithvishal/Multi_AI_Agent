@@ -10,8 +10,8 @@ Endpoints:
 """
 
 from typing import Any, Dict, List
-from fastapi import APIRouter, Depends, Request
-from tripmate.schemas import APIResponse, AdminStatsResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from tripmate.schemas import APIResponse, AdminStatsResponse, UserRegisterRequest
 from tripmate.services.admin_service import admin_service
 from tripmate.services.travel_service import RUN_STORE
 from tripmate.api.dependencies import require_admin
@@ -51,6 +51,38 @@ async def list_users(request: Request, admin_user: Dict[str, Any] = Depends(requ
         error=None,
         request_id=request_id,
     )
+
+
+@router.post(
+    "/users",
+    summary="Admin Provision User / Admin Account",
+    description="Allows authenticated administrators to register new user or administrator accounts.",
+    response_model=APIResponse[Dict[str, Any]],
+)
+async def create_user(
+    req: UserRegisterRequest,
+    request: Request,
+    admin_user: Dict[str, Any] = Depends(require_admin),
+):
+    request_id = getattr(request.state, "request_id", "req_adm")
+    try:
+        token_data = admin_service.create_user_account(
+            username=req.username,
+            email=req.email,
+            password=req.password,
+            role=req.role,
+        )
+        return APIResponse(
+            success=True,
+            data=token_data,
+            error=None,
+            request_id=request_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "USER_CREATION_FAILED", "message": str(exc)},
+        )
 
 
 @router.post(

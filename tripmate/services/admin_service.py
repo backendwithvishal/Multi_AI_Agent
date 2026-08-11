@@ -53,6 +53,13 @@ class AdminService:
             for u in users
         ]
 
+    def create_user_account(self, username: str, email: str, password: str, role: str = "user") -> Dict[str, Any]:
+        """Allows administrators to provision new user or admin accounts."""
+        from tripmate.services.auth_service import auth_service
+        from tripmate.schemas import UserRegisterRequest
+        req = UserRegisterRequest(username=username, email=email, password=password, role=role)
+        return auth_service.register_user(req, is_caller_admin=True)
+
     def reset_circuit_breaker(self, service_name: str) -> Dict[str, Any]:
         """Manually resets designated circuit breakers."""
         reset_list = []

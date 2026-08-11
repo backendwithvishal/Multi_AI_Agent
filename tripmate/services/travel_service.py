@@ -82,6 +82,11 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optio
     return payload
 
 
+from fastapi import HTTPException, status
+from tripmate.database.store import store
+from tripmate.api.dependencies import validate_thread_ownership
+
+
 class TravelService:
     """Main service providing clean API interfaces for workflow invocation."""
 
@@ -89,6 +94,9 @@ class TravelService:
         """Runs the complete multi-agent workflow for a travel query."""
         if not thread_id:
             thread_id = f"user_{uuid.uuid4().hex}"
+
+        if user_id:
+            store.register_thread_owner(thread_id, user_id)
 
         run_id = f"run_{uuid.uuid4().hex[:12]}"
         config = {"configurable": {"thread_id": thread_id}}
@@ -127,9 +135,26 @@ class TravelService:
         )
         return serialize_graph_result(result, thread_id, run_id=run_id)
 
-    async def resume_travel_plan(self, thread_id: str, approved: bool, feedback: str = "") -> Dict[str, Any]:
+    async def resume_travel_plan(self, thread_id: str, approved: bool, feedback: str = "", user_id: Optional[str] = None) -> Dict[str, Any]:
         """Resumes a paused workflow thread after human approval or revision request."""
+        if user_id:
+            await validate_thread_ownership(thread_id, user_id)
+
         config = {"configurable": {"thread_id": thread_id}}
+        state = await travel_workflow_graph.aget_state(config)
+
+        if not state or not getattr(state, "values", None):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": "THREAD_NOT_FOUND", "message": f"Thread ID '{thread_id}' not found or has no execution history."},
+            )
+
+        if not getattr(state, "next", None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "INVALID_WORKFLOW_STATE", "message": f"Thread ID '{thread_id}' is not currently waiting for approval."},
+            )
+
         result = await travel_workflow_graph.ainvoke(
             Command(
                 resume={
@@ -141,12 +166,12 @@ class TravelService:
         )
         return serialize_graph_result(result, thread_id)
 
-    async def stream_travel_events(self, user_input: str, thread_id: str, request_id: str) -> AsyncGenerator[str, None]:
+    async def stream_travel_events(self, user_input: str, thread_id: str, request_id: str, user_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Streams real-time execution progress events using Server-Sent Events (SSE)."""
         yield f"event: workflow.started\ndata: {json.dumps({'thread_id': thread_id, 'request_id': request_id, 'status': 'started'})}\n\n"
         
         try:
-            result = await self.execute_travel_plan(user_input, thread_id)
+            result = await self.execute_travel_plan(user_input, thread_id, user_id=user_id)
             selected = result.get("selected_agents", [])
             yield f"event: supervisor.completed\ndata: {json.dumps({'selected_agents': selected, 'reasoning': result.get('supervisor_reasoning')})}\n\n"
 

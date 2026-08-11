@@ -4,16 +4,23 @@ Authentication & User Management Service
 Handles registration, credential validation, token issuance, and user profiles.
 """
 
+import secrets
 from typing import Any, Dict, Optional
 from tripmate.database.store import store, hash_password, verify_password, generate_token
 from tripmate.schemas import UserRegisterRequest, UserLoginRequest, TokenResponse, UserProfile
+from tripmate.config.settings import settings
 
 
 class AuthService:
     """Authentication and identity service."""
 
-    def register_user(self, req: UserRegisterRequest) -> Dict[str, Any]:
-        """Registers a new user account."""
+    def register_user(
+        self,
+        req: UserRegisterRequest,
+        admin_secret: Optional[str] = None,
+        is_caller_admin: bool = False,
+    ) -> Dict[str, Any]:
+        """Registers a new user account safely."""
         existing = store.get_user_by_username_or_email(req.username)
         if existing:
             raise ValueError(f"Username '{req.username}' is already registered.")
@@ -22,12 +29,24 @@ class AuthService:
         if existing_email:
             raise ValueError(f"Email '{req.email}' is already registered.")
 
+        # Prevent unauthorized self-assignment of administrative roles
+        assigned_role = "user"
+        if req.role == "admin":
+            if is_caller_admin:
+                assigned_role = "admin"
+            elif (
+                settings.ADMIN_REGISTRATION_SECRET
+                and admin_secret
+                and secrets.compare_digest(admin_secret.strip(), settings.ADMIN_REGISTRATION_SECRET)
+            ):
+                assigned_role = "admin"
+
         hashed_pw = hash_password(req.password)
         user = store.create_user(
             username=req.username,
             email=req.email,
             password_hash=hashed_pw,
-            role=req.role,
+            role=assigned_role,
         )
         token = generate_token(user["id"], user["username"], user["role"])
         return {
@@ -52,6 +71,22 @@ class AuthService:
             "username": user["username"],
             "role": user["role"],
         }
+
+    def request_password_reset(self, email: str) -> Dict[str, Any]:
+        """Generates a secure password reset token without leaking account existence."""
+        reset_token = store.create_password_reset_token(email)
+        return {
+            "message": "If an account matches that email address, password reset instructions have been dispatched.",
+            "reset_token": reset_token,
+        }
+
+    def reset_password(self, reset_token: str, new_password: str) -> bool:
+        """Validates token and updates user account password."""
+        hashed_pw = hash_password(new_password)
+        success = store.verify_and_consume_reset_token(reset_token, hashed_pw)
+        if not success:
+            raise ValueError("Invalid, expired, or already consumed reset token.")
+        return True
 
     def get_profile(self, user_id: str) -> Optional[UserProfile]:
         """Fetches user profile by user ID."""
