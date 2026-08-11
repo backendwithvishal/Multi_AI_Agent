@@ -5,7 +5,8 @@ This module provides a unified LLM routing interface to instantiate and direct r
 - Fast models for guardrails and fast classification (Groq / OpenRouter)
 - Reasoning models for dynamic planning, synthesis, and critic evaluations
 - Primary provider: Groq (`GROQ_API_KEY`)
-- Fallback provider: OpenRouter (`OPENROUTER_API_KEY`)
+- Secondary provider: OpenRouter (`OPENROUTER_API_KEY`)
+- Tertiary provider: Hugging Face (`HUGGINGFACE_API_KEY`)
 """
 
 import os
@@ -13,6 +14,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 from dotenv import load_dotenv
+
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.outputs import ChatResult, ChatGeneration
 
 from tripmate.config.settings import settings
 
@@ -23,6 +28,31 @@ class ModelTier(str, Enum):
     FAST = "fast"
     REASONING = "reasoning"
     SPECIALIZED = "specialized"
+
+
+def _create_openai_compatible_client(model_name: str, api_key: str, base_url: str, timeout: float) -> Any:
+    """
+    Helper creating an OpenAI-compatible REST API client.
+    
+    Note: This is used for OpenRouter (using OPENROUTER_API_KEY) and Hugging Face (using HUGGINGFACE_API_KEY).
+    No OpenAI API key is needed or used.
+    """
+    try:
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            model=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+        )
+    except Exception:
+        from langchain_community.chat_models import ChatGroq
+        return ChatGroq(
+            model_name=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+        )
 
 
 class ModelRouter:
@@ -71,7 +101,7 @@ class ModelRouter:
         if not groq_key and not openrouter_key and not hf_key:
             return None
 
-        # 1. Primary Provider: Groq API
+        # 1. Primary Provider: Groq API (using GROQ_API_KEY)
         if groq_key:
             model_name = "llama-3.3-70b-versatile"
             if tier == ModelTier.FAST:
@@ -89,7 +119,7 @@ class ModelRouter:
             except Exception as exc:
                 print(f"ModelRouter Groq initialization notice: {exc}")
 
-        # 2. Secondary Provider: OpenRouter API
+        # 2. Secondary Provider: OpenRouter API (using OPENROUTER_API_KEY)
         if openrouter_key:
             if tier == ModelTier.FAST:
                 openrouter_model = os.getenv(
@@ -103,26 +133,24 @@ class ModelRouter:
                 )
 
             try:
-                from langchain_community.chat_models import ChatOpenAI
-                return ChatOpenAI(
+                return _create_openai_compatible_client(
                     model_name=openrouter_model,
-                    openai_api_key=openrouter_key,
-                    openai_api_base="https://openrouter.ai/api/v1",
-                    request_timeout=settings.LLM_TIMEOUT_SECONDS,
+                    api_key=openrouter_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    timeout=settings.LLM_TIMEOUT_SECONDS,
                 )
             except Exception as exc:
                 print(f"ModelRouter OpenRouter initialization notice: {exc}")
 
-        # 3. Tertiary Provider: Hugging Face API
+        # 3. Tertiary Provider: Hugging Face API (using HUGGINGFACE_API_KEY)
         if hf_key:
             hf_model = os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
             try:
-                from langchain_community.chat_models import ChatOpenAI
-                return ChatOpenAI(
+                return _create_openai_compatible_client(
                     model_name=hf_model,
-                    openai_api_key=hf_key,
-                    openai_api_base="https://api-inference.huggingface.co/v1",
-                    request_timeout=settings.LLM_TIMEOUT_SECONDS,
+                    api_key=hf_key,
+                    base_url="https://api-inference.huggingface.co/v1",
+                    timeout=settings.LLM_TIMEOUT_SECONDS,
                 )
             except Exception as exc:
                 print(f"ModelRouter Hugging Face initialization notice: {exc}")
@@ -132,4 +160,3 @@ class ModelRouter:
 
 # Shared singleton router instance
 model_router = ModelRouter()
-
