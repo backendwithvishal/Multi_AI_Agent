@@ -166,3 +166,54 @@ async def test_v1_authentication_enforcement(monkeypatch):
         )
         assert resp_bearer.status_code == 200
 
+
+@pytest.mark.asyncio
+async def test_v1_assets_get_and_delete():
+    """Tests GET and DELETE travel asset operations via /api/v1/assets/{asset_id}."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Create asset
+        resp_create = await client.post(
+            "/api/v1/assets",
+            json={
+                "name": "E-Ticket: Air France AF007",
+                "asset_type": "ticket",
+                "trip_id": "trip_paris_101",
+                "content_uri": "https://storage.tripmate.ai/tickets/af007.pdf",
+                "metadata": {"booking_ref": "AF-887766"},
+            },
+        )
+        assert resp_create.status_code == 200
+        data_create = resp_create.json()
+        assert data_create["success"] is True
+        asset_id = data_create["data"]["id"]
+
+        # 2. Get asset details by ID
+        resp_get = await client.get(f"/api/v1/assets/{asset_id}")
+        assert resp_get.status_code == 200
+        data_get = resp_get.json()
+        assert data_get["success"] is True
+        assert data_get["data"]["id"] == asset_id
+        assert data_get["data"]["name"] == "E-Ticket: Air France AF007"
+        assert data_get["data"]["asset_type"] == "ticket"
+
+        # 3. Delete asset by ID
+        resp_delete = await client.delete(f"/api/v1/assets/{asset_id}")
+        assert resp_delete.status_code == 200
+        data_del = resp_delete.json()
+        assert data_del["success"] is True
+        assert data_del["data"]["deleted"] is True
+        assert data_del["data"]["id"] == asset_id
+
+        # 4. Verify get on deleted asset returns 404
+        resp_get_404 = await client.get(f"/api/v1/assets/{asset_id}")
+        assert resp_get_404.status_code == 404
+        data_get_404 = resp_get_404.json()
+        assert data_get_404["success"] is False
+        assert data_get_404["error"]["code"] == "ASSET_NOT_FOUND"
+
+        # 5. Verify delete on already deleted asset returns 404
+        resp_del_404 = await client.delete(f"/api/v1/assets/{asset_id}")
+        assert resp_del_404.status_code == 404
+        data_del_404 = resp_del_404.json()
+        assert data_del_404["success"] is False
+        assert data_del_404["error"]["code"] == "ASSET_NOT_FOUND"
