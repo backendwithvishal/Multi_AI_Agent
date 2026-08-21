@@ -110,7 +110,6 @@ def get_forecast(city: str) -> dict[str, Any]:
         "forecast": forecast,
     }
 
-
 if __name__ == "__main__":
     # Run server on standard I/O (stdio) transport
     mcp.run(transport="stdio")
