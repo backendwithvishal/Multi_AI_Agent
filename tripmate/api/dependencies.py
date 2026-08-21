@@ -115,7 +115,7 @@ async def get_current_user(
             "id": "user_demo_002",
             "username": "demouser",
             "email": "user@tripmate.ai",
-            "role": "admin" if not settings.AUTH_REQUIRED else "user",
+            "role": "user",
         }
 
     raise HTTPException(

@@ -96,6 +96,7 @@ class TravelService:
             thread_id = f"user_{uuid.uuid4().hex}"
 
         if user_id:
+            await validate_thread_ownership(thread_id, user_id)
             store.register_thread_owner(thread_id, user_id)
 
         run_id = f"run_{uuid.uuid4().hex[:12]}"
@@ -169,19 +170,65 @@ class TravelService:
     async def stream_travel_events(self, user_input: str, thread_id: str, request_id: str, user_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Streams real-time execution progress events using Server-Sent Events (SSE)."""
         yield f"event: workflow.started\ndata: {json.dumps({'thread_id': thread_id, 'request_id': request_id, 'status': 'started'})}\n\n"
-        
+
+        if user_id:
+            await validate_thread_ownership(thread_id, user_id)
+            store.register_thread_owner(thread_id, user_id)
+
+        run_id = f"run_{uuid.uuid4().hex[:12]}"
+        config = {"configurable": {"thread_id": thread_id}}
+        t0 = time.time()
+        initial_input = {
+            "messages": [HumanMessage(content=user_input)],
+            "user_query": user_input,
+            "user_id": user_id,
+            "thread_id": thread_id,
+            "run_id": run_id,
+            "status": "RUNNING",
+            "guardrail_allowed": True,
+            "guardrail_reason": "",
+            "selected_agents": [],
+            "trip_constraints": {},
+            "supervisor_reasoning": "",
+            "flight_results": "",
+            "hotel_results": "",
+            "weather_results": "",
+            "budget_results": "",
+            "itinerary": "",
+            "approval_request": "",
+            "approved": False,
+            "human_feedback": "",
+            "final_response": "",
+            "structured_outputs": {},
+            "evidence_items": [],
+            "critic_report": {},
+            "llm_calls": 0,
+            "start_time": t0,
+            "metrics": {"agent_latencies": {}, "total_latency_ms": 0.0},
+        }
+
         try:
-            result = await self.execute_travel_plan(user_input, thread_id, user_id=user_id)
-            selected = result.get("selected_agents", [])
-            yield f"event: supervisor.completed\ndata: {json.dumps({'selected_agents': selected, 'reasoning': result.get('supervisor_reasoning')})}\n\n"
+            async for event in travel_workflow_graph.astream(initial_input, config=config, stream_mode="updates"):
+                for node_name, node_output in event.items():
+                    if node_name == "supervisor":
+                        selected = node_output.get("selected_agents", [])
+                        reasoning = node_output.get("supervisor_reasoning", "")
+                        yield f"event: supervisor.completed\ndata: {json.dumps({'selected_agents': selected, 'reasoning': reasoning})}\n\n"
+                    elif node_name == "parallel_specialists":
+                        yield f"event: specialists.completed\ndata: {json.dumps({'status': 'completed', 'node': node_name})}\n\n"
+                    elif node_name == "critic":
+                        yield f"event: critic.completed\ndata: {json.dumps({'critic_report': node_output.get('critic_report')})}\n\n"
+                    elif node_name == "itinerary_agent":
+                        yield f"event: itinerary.completed\ndata: {json.dumps({'status': 'draft_synthesized'})}\n\n"
 
-            for agent in selected:
-                yield f"event: agent.completed\ndata: {json.dumps({'agent': agent, 'status': 'completed'})}\n\n"
+            state = await travel_workflow_graph.aget_state(config)
+            state_values = getattr(state, "values", {}) or {}
+            serialized = serialize_graph_result(state_values, thread_id, run_id=run_id)
 
-            if result.get("requires_approval"):
-                yield f"event: approval.required\ndata: {json.dumps({'approval_request': result.get('approval_request')})}\n\n"
+            if serialized.get("requires_approval"):
+                yield f"event: approval.required\ndata: {json.dumps({'approval_request': serialized.get('approval_request')})}\n\n"
 
-            yield f"event: workflow.completed\ndata: {json.dumps({'success': True, 'request_id': request_id, **result})}\n\n"
+            yield f"event: workflow.completed\ndata: {json.dumps({'success': True, 'request_id': request_id, **serialized})}\n\n"
         except Exception as exc:
             yield f"event: workflow.failed\ndata: {json.dumps({'success': False, 'error': str(exc), 'request_id': request_id})}\n\n"
 

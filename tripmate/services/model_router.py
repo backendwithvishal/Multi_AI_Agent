@@ -32,10 +32,8 @@ class ModelTier(str, Enum):
 
 def _create_openai_compatible_client(model_name: str, api_key: str, base_url: str, timeout: float) -> Any:
     """
-    Helper creating an OpenAI-compatible REST API client.
-    
-    Note: This is used for OpenRouter (using OPENROUTER_API_KEY) and Hugging Face (using HUGGINGFACE_API_KEY).
-    No OpenAI API key is needed or used.
+    Helper creating an OpenAI-compatible REST API client for OpenRouter and Hugging Face.
+    Supports GROQ_API_KEY, OPENROUTER_API_KEY, and HUGGINGFACE_API_KEY.
     """
     try:
         from langchain_groq import ChatGroq
@@ -46,13 +44,19 @@ def _create_openai_compatible_client(model_name: str, api_key: str, base_url: st
             timeout=timeout,
         )
     except Exception:
-        from langchain_community.chat_models import ChatGroq
-        return ChatGroq(
+        pass
+
+    try:
+        from langchain_community.chat_models import ChatOpenAI
+        return ChatOpenAI(
             model_name=model_name,
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
+            openai_api_key=api_key,
+            openai_api_base=base_url,
+            request_timeout=timeout,
         )
+    except Exception as exc:
+        print(f"OpenAI-compatible client creation notice: {exc}")
+        return None
 
 
 class ModelRouter:
@@ -124,34 +128,45 @@ class ModelRouter:
             if tier == ModelTier.FAST:
                 openrouter_model = os.getenv(
                     "OPENROUTER_FAST_MODEL",
-                    os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct"),
+                    os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
                 )
             else:
                 openrouter_model = os.getenv(
                     "OPENROUTER_REASONING_MODEL",
-                    os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct"),
+                    os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
                 )
 
             try:
-                return _create_openai_compatible_client(
+                client = _create_openai_compatible_client(
                     model_name=openrouter_model,
                     api_key=openrouter_key,
                     base_url="https://openrouter.ai/api/v1",
                     timeout=settings.LLM_TIMEOUT_SECONDS,
                 )
+                if client:
+                    return client
             except Exception as exc:
                 print(f"ModelRouter OpenRouter initialization notice: {exc}")
 
         # 3. Tertiary Provider: Hugging Face API (using HUGGINGFACE_API_KEY)
         if hf_key:
-            hf_model = os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+            if tier == ModelTier.FAST:
+                hf_model = os.getenv("HUGGINGFACE_FAST_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct")
+            else:
+                hf_model = os.getenv(
+                    "HUGGINGFACE_REASONING_MODEL",
+                    os.getenv("HUGGINGFACE_MODEL", "meta-llama/Llama-3.3-70B-Instruct"),
+                )
+
             try:
-                return _create_openai_compatible_client(
+                client = _create_openai_compatible_client(
                     model_name=hf_model,
                     api_key=hf_key,
-                    base_url="https://api-inference.huggingface.co/v1",
+                    base_url="https://router.huggingface.co/v1",
                     timeout=settings.LLM_TIMEOUT_SECONDS,
                 )
+                if client:
+                    return client
             except Exception as exc:
                 print(f"ModelRouter Hugging Face initialization notice: {exc}")
 

@@ -218,8 +218,15 @@ async def human_approval_node(state: TravelState):
         }
     )
 
-    approved = bool(review.get("approved", False))
-    feedback = str(review.get("feedback", "")).strip()
+    if isinstance(review, dict):
+        approved = bool(review.get("approved", False))
+        feedback = str(review.get("feedback", "")).strip()
+    elif isinstance(review, bool):
+        approved = review
+        feedback = ""
+    else:
+        approved = bool(review)
+        feedback = str(review).strip()
 
     return {
         "status": "APPROVED" if approved else "REVISION_REQUESTED",
