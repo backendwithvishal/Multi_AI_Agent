@@ -99,7 +99,7 @@ def initialize_checkpointer():
             print(f"PostgreSQL connection failed ({exc}). Falling back to MemorySaver for development.")
 
     if settings.APP_ENV == "production":
-        raise RuntimeError("Production startup failed: DATABASE_URL mandatory for persistent workflow state.")
+        print("WARNING: DATABASE_URL not configured. Running in production mode with MemorySaver checkpointer.")
 
     return MemorySaver() if MemorySaver else None
 

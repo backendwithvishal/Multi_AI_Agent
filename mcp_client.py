@@ -30,7 +30,20 @@ os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 WEATHER_SERVER_PATH = BASE_DIR / "custom_weather_mcp_server.py"
-UVX_COMMAND = shutil.which("uvx") or "uvx"
+
+def _find_uvx() -> str:
+    uvx_path = shutil.which("uvx")
+    if uvx_path:
+        return uvx_path
+    venv_bin_uvx = Path(sys.prefix) / "bin" / ("uvx.exe" if sys.platform == "win32" else "uvx")
+    if venv_bin_uvx.exists():
+        return str(venv_bin_uvx)
+    venv_scripts_uvx = Path(sys.prefix) / "Scripts" / "uvx.exe"
+    if venv_scripts_uvx.exists():
+        return str(venv_scripts_uvx)
+    return "uvx"
+
+UVX_COMMAND = _find_uvx()
 
 
 def _require_env(name: str, value: Optional[str]) -> str:
@@ -109,7 +122,7 @@ async def _get_server_tool(server_name: str, tool_name: str):
             "AVIATION_STACK_API_KEY",
             os.getenv("AVIATION_STACK_API_KEY") or os.getenv("AVIATIONSTACK_API_KEY"),
         )
-        if shutil.which("uvx") is None:
+        if shutil.which("uvx") is None and shutil.which("uv") is None and not Path(UVX_COMMAND).is_file():
             raise RuntimeError(
                 "uvx was not found. Install uv, reopen the terminal, "
                 "activate the travel environment, and run `uvx --version`."

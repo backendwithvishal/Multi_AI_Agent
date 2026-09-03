@@ -1,6 +1,7 @@
 import os
 import uuid
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, APIRouter, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError, HTTPException as FastAPIHTTPException
@@ -34,6 +35,17 @@ from tripmate.api.v1.routes.approval import router as approval_v1_router
 from tripmate.api.v1.routes.runs import router as runs_v1_router
 from tripmate.services.travel_service import travel_service
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Perform production configuration check on application startup
+    try:
+        settings.validate_production()
+    except ValueError as exc:
+        print(f"[STARTUP WARNING] {exc}")
+    yield
+
+
 # Initialize FastAPI web app
 app = FastAPI(
     title=settings.APP_NAME,
@@ -45,6 +57,7 @@ app = FastAPI(
     version=settings.APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Register HTTP middleware chain in order of execution

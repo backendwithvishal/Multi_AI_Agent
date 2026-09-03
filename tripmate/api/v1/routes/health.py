@@ -51,7 +51,7 @@ async def liveness_probe():
 )
 async def readiness_probe(response: Response):
     db_health = check_db_health()
-    if settings.APP_ENV == "production" and not db_health["connected"]:
+    if settings.APP_ENV == "production" and db_health.get("status") == "unhealthy":
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {
             "status": "not_ready",
