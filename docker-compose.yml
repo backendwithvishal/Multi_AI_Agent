@@ -16,7 +16,6 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY}
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
       - AVIATIONSTACK_API_KEY=${AVIATIONSTACK_API_KEY}
-      - EXTERNAL_API_TIMEOUT_SECONDS=${EXTERNAL_API_TIMEOUT_SECONDS:-10.0}
       - DATABASE_URL=postgresql://postgres:postgres_pass@postgres_db:5432/tripmate_db
     depends_on:
       postgres_db:
