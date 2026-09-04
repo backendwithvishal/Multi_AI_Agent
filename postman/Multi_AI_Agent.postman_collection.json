@@ -52,6 +52,28 @@
 			"item": [
 				{
 					"name": "GET /api/v1/status (Operational Telemetry & Status)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status Code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Telemetry Data Present', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('status');",
+									"    pm.expect(jsonData.data).to.have.property('model_tiers');",
+									"    pm.expect(jsonData.data).to.have.property('circuit_breakers');",
+									"    console.log('Model Tiers:', jsonData.data.model_tiers);",
+									"    console.log('Circuit Breakers:', jsonData.data.circuit_breakers);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -710,6 +732,13 @@
 		{ "key": "baseUrl", "value": "http://127.0.0.1:8000" },
 		{ "key": "accessToken", "value": "" },
 		{ "key": "adminAccessToken", "value": "" },
+		{ "key": "groqApiKey", "value": "" },
+		{ "key": "openrouterApiKey", "value": "sk-or-v1-" },
+		{ "key": "huggingfaceApiKey", "value": "" },
+		{ "key": "tavilyApiKey", "value": "tvly-dev-kFj2z-" },
+		{ "key": "openweatherApiKey", "value": "" },
+		{ "key": "aviationstackApiKey", "value": "" },
+		{ "key": "langchainApiKey", "value": "" },
 		{ "key": "watchlistId", "value": "wl_sample_123" },
 		{ "key": "alertId", "value": "alt_sample_123" },
 		{ "key": "assetId", "value": "ast_sample_123" }

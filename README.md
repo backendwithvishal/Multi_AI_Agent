@@ -98,6 +98,8 @@ OPENROUTER_API_KEY=your_openrouter_api_key
 TAVILY_API_KEY=your_tavily_api_key
 OPENWEATHER_API_KEY=your_openweather_api_key
 AVIATIONSTACK_API_KEY=your_aviationstack_api_key
+HUGGINGFACE_API_KEY=your_huggingface_api_key
+LANGCHAIN_API_KEY=your_langchain_api_key
 ```
 
 ### 3. Run Development Server
@@ -109,7 +111,20 @@ python app.py
 ```
 Open interactive docs at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-### 4. Run Docker Container
+### 4. Verify API Keys & System Telemetry
+Verify configured API keys and circuit breaker status via the status endpoint:
+```bash
+curl http://localhost:8000/api/v1/status
+```
+Returns model tier readiness (`groq_configured`, `openrouter_configured`) and circuit breaker health (`tavily`, `aviation`, `weather`).
+
+### 5. Postman Collection API Key Testing
+Import the official Postman collection:
+- **Collection File**: [`postman/Multi_AI_Agent.postman_collection.json`](file:///d:/AI_Project/Multi_AI_Agent/postman/Multi_AI_Agent.postman_collection.json)
+- **Built-in Variables**: Contains `baseUrl` (`http://127.0.0.1:8000`) and collection variables for all API keys (`groqApiKey`, `openrouterApiKey`, `tavilyApiKey`, `openweatherApiKey`, `aviationstackApiKey`, `huggingfaceApiKey`, `langchainApiKey`).
+- **Telemetry Test Assertions**: Run `GET /api/v1/status` in Postman to automatically execute built-in test assertions verifying model tiers, circuit breakers, and system readiness.
+
+### 6. Run Docker Container
 ```bash
 docker compose up --build
 ```
