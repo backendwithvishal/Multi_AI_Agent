@@ -42,11 +42,33 @@ def _parse_int(name: str, default: int) -> int:
 
 
 def _parse_float(name: str, default: float) -> float:
-    """Safely converts environment variable to float with clear error reporting."""
+    """Safely converts environment variable to float with clear error reporting.
+
+    Also detects concatenated numeric strings (e.g. '10.010.0') which occur
+    when the same variable is accidentally written twice in a .env file or when
+    docker-compose env_file and environment: blocks both supply the same key and
+    the values get merged instead of overridden.
+    """
     raw = os.getenv(name)
     if raw is None or not raw.strip():
         return default
     cleaned = raw.strip()
+
+    # --- Detect concatenated-value corruption (e.g. "10.010.0", "30.030.0") ---
+    # A valid float has at most one leading sign, one decimal point, and no
+    # embedded whitespace. If the string contains more than one decimal point
+    # *and* is still not parseable (NaN/Inf aside), it almost certainly means
+    # two values were concatenated. Emit a targeted hint so the cause is obvious.
+    if cleaned.count(".") > 1:
+        raise ValueError(
+            f"Invalid configuration for '{name}': value '{raw}' looks like two numbers "
+            f"concatenated together (e.g. '10.0' + '10.0' → '10.010.0'). "
+            f"Check for duplicate definitions of {name} in: "
+            f"(1) your .env file (duplicate key on two lines), "
+            f"(2) both env_file: and environment: blocks in docker-compose.yml, "
+            f"or (3) a shell script that appends instead of assigns the variable."
+        )
+
     try:
         return float(cleaned)
     except ValueError as exc:
