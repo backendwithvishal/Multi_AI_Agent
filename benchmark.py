@@ -12,12 +12,10 @@ import asyncio
 import time
 from typing import Dict, Any
 
-
 async def mock_specialist_agent(name: str, delay_seconds: float) -> Dict[str, Any]:
     """Simulates specialist agent API work with realistic latency."""
     await asyncio.sleep(delay_seconds)
     return {name: f"Results for {name}"}
-
 
 async def run_sequential_benchmark(agents: dict) -> float:
     """Executes specialist agents sequentially (one by one)."""
@@ -25,7 +23,6 @@ async def run_sequential_benchmark(agents: dict) -> float:
     for name, delay in agents.items():
         await mock_specialist_agent(name, delay)
     return time.time() - t0
-
 
 async def run_parallel_benchmark(agents: dict) -> float:
     """Executes specialist agents in parallel using asyncio.gather."""
@@ -59,7 +56,6 @@ async def main():
     print("\n" + "-" * 60)
     print(f"Empirical Time Savings: {seq_time - par_time:.3f} seconds ({speedup_pct:.1f}% reduction)")
     print("-" * 60)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
