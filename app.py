@@ -7,8 +7,10 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError, HTTPException as FastAPIHTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+
+
 
 
 
@@ -227,183 +229,11 @@ class LegacyApprovalRequest(BaseModel):
     feedback: str = ""
 
 
-# Root health & landing endpoint
+# Root health & metadata endpoint
 @app.get("/")
 async def root(request: Request):
-    """Production root landing dashboard & metadata probe."""
+    """Production root JSON metadata probe describing service status and primary endpoints."""
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
-    accept_header = request.headers.get("accept", "")
-
-    # Return polished HTML Dashboard for browser visits
-    if "text/html" in accept_header and "application/json" not in accept_header:
-        html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{settings.APP_NAME}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: radial-gradient(circle at 50% 0%, #1a1f35 0%, #0a0d18 100%);
-            color: #f1f5f9;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-        }}
-        .card {{
-            background: rgba(15, 23, 42, 0.75);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            max-width: 680px;
-            width: 100%;
-            padding: 40px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(56, 189, 248, 0.1);
-        }}
-        .header {{
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
-        }}
-        .badge {{
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 14px;
-            border-radius: 9999px;
-            font-size: 13px;
-            font-weight: 600;
-            background: rgba(34, 197, 94, 0.15);
-            color: #4ade80;
-            border: 1px solid rgba(34, 197, 94, 0.3);
-        }}
-        .dot {{
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #22c55e;
-            box-shadow: 0 0 10px #22c55e;
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }}
-        @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: .5; }} }}
-        h1 {{
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-            background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 12px;
-        }}
-        p.subtitle {{
-            color: #94a3b8;
-            font-size: 15px;
-            line-height: 1.6;
-            margin-bottom: 32px;
-        }}
-        .grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
-        }}
-        .stat-box {{
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 16px;
-        }}
-        .stat-label {{ font-size: 12px; color: #64748b; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }}
-        .stat-val {{ font-size: 16px; font-weight: 600; color: #e2e8f0; margin-top: 4px; }}
-        .actions {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-        }}
-        .btn {{
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 12px 20px;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s ease;
-        }}
-        .btn-primary {{
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            color: #ffffff;
-            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
-        }}
-        .btn-primary:hover {{
-            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-            transform: translateY(-1px);
-        }}
-        .btn-secondary {{
-            background: rgba(51, 65, 85, 0.6);
-            color: #e2e8f0;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }}
-        .btn-secondary:hover {{
-            background: rgba(71, 85, 105, 0.8);
-            transform: translateY(-1px);
-        }}
-        .footer {{
-            margin-top: 28px;
-            font-size: 12px;
-            color: #64748b;
-            text-align: center;
-        }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="header">
-            <span class="badge"><span class="dot"></span> Systems Operational</span>
-            <span style="font-size: 13px; color: #64748b;">v{settings.APP_VERSION}</span>
-        </div>
-        <h1>{settings.APP_NAME}</h1>
-        <p class="subtitle">Enterprise multi-agent autonomous travel planning backend powered by LangGraph, MCP tools, and real-time streaming.</p>
-        
-        <div class="grid">
-            <div class="stat-box">
-                <div class="stat-label">Environment</div>
-                <div class="stat-val">{settings.APP_ENV.title()}</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">API Status</div>
-                <div class="stat-val" style="color: #4ade80;">Active (v1)</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Request ID</div>
-                <div class="stat-val" style="font-family: monospace; font-size: 13px;">{request_id[:12]}...</div>
-            </div>
-        </div>
-
-        <div class="actions">
-            <a href="/docs" class="btn btn-primary" id="btn-docs">Explore Swagger Docs →</a>
-            <a href="/redoc" class="btn btn-secondary" id="btn-redoc">ReDoc Specs</a>
-            <a href="/api/v1/health" class="btn btn-secondary" id="btn-health">Health Telemetry</a>
-        </div>
-
-        <div class="footer">
-            TripMate Backend Engine • Designed for Production Resilience
-        </div>
-    </div>
-</body>
-</html>"""
-        return HTMLResponse(content=html_content, status_code=200)
-
-    # Return concise structured JSON for API clients
     return {
         "service": settings.APP_NAME,
         "status": "online",
@@ -424,6 +254,7 @@ async def root(request: Request):
             "auth": "POST /api/v1/auth/login",
         },
     }
+
 
 
 
