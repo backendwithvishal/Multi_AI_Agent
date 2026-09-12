@@ -4,10 +4,10 @@ Legacy API Endpoint Test Suite
 Verifies root metadata, legacy health probes, empty message validation, and approval feedback validation.
 """
 
-# pyrefly: ignore [missing-import]
 import pytest
 from httpx import AsyncClient, ASGITransport
 from app import app
+from tripmate.config.settings import settings
 
 
 @pytest.mark.asyncio
@@ -20,10 +20,15 @@ async def test_root_endpoint():
         assert response.status_code == 200
         assert "application/json" in response.headers.get("content-type", "")
         data = response.json()
-        assert data["service"] == "TripMate AI Multi-Agent Backend Engine"
-        assert data["status"] == "online"
-        assert "endpoints" in data
-        assert "docs" in data["endpoints"]
+        assert data["name"] == settings.APP_NAME
+        assert "Multi-Agent AI" in data["description"]
+        assert data["version"] == settings.APP_VERSION
+        assert data["status"] == "operational"
+        assert data["environment"] == settings.APP_ENV
+        assert data["api_base"] == "/api/v1"
+        assert data["docs"] == "/docs"
+        assert data["health"] == "/api/v1/health"
+        assert data["status_endpoint"] == "/api/v1/status"
 
 
 

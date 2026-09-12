@@ -21,7 +21,7 @@ from tripmate.middleware import (
     SecurityHeadersMiddleware,
     StructuredLoggingMiddleware,
 )
-from tripmate.schemas import APIResponse, ErrorDetail
+from tripmate.schemas import APIResponse, ErrorDetail, APIRootResponse
 
 # Import all 10 API Domain Routers
 from tripmate.api.v1.routes.health import router as health_v1_router
@@ -229,31 +229,26 @@ class LegacyApprovalRequest(BaseModel):
     feedback: str = ""
 
 
-# Root health & metadata endpoint
-@app.get("/")
-async def root(request: Request):
-    """Production root JSON metadata probe describing service status and primary endpoints."""
-    request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
-    return {
-        "service": settings.APP_NAME,
-        "status": "online",
-        "version": settings.APP_VERSION,
-        "environment": settings.APP_ENV,
-        "docs_url": "/docs",
-        "redoc_url": "/redoc",
-        "request_id": request_id,
-        "endpoints": {
-            "docs": "/docs",
-            "redoc": "/redoc",
-            "health": "GET /api/v1/health",
-            "status": "GET /api/v1/status",
-            "travel": "POST /api/v1/travel",
-            "travel_stream": "POST /api/v1/travel/stream",
-            "travel_approve": "POST /api/v1/travel/approve",
-            "runs": "GET /api/v1/runs/{run_id}",
-            "auth": "POST /api/v1/auth/login",
-        },
-    }
+# Production Root Metadata & Navigation Endpoint
+@app.get(
+    "/",
+    summary="API Information",
+    description="Returns basic information, operational status, and available entry points for the Multi-Agent AI API.",
+    response_model=APIRootResponse,
+)
+async def root():
+    """Production root endpoint returning top-level API metadata and entry points."""
+    return APIRootResponse(
+        name=settings.APP_NAME,
+        description="Production-grade Multi-Agent AI Orchestration Platform",
+        version=settings.APP_VERSION,
+        status="operational",
+        environment=settings.APP_ENV,
+        api_base="/api/v1",
+        docs="/docs",
+        health="/api/v1/health",
+        status_endpoint="/api/v1/status",
+    )
 
 
 

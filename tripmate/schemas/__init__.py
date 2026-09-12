@@ -37,6 +37,18 @@ class APIResponse(BaseModel, Generic[T]):
     request_id: str = Field(description="Unique correlation ID attached to request.")
 
 
+class APIRootResponse(BaseModel):
+    name: str = Field(description="Application service name.")
+    description: str = Field(description="Platform summary description.")
+    version: str = Field(description="Current deployed API version.")
+    status: str = Field(description="Operational status.")
+    environment: str = Field(description="Current deployment environment.")
+    api_base: str = Field(description="Base path for versioned REST API endpoints.")
+    docs: str = Field(description="Interactive Swagger/OpenAPI documentation path.")
+    health: str = Field(description="Health diagnostic probe path.")
+    status_endpoint: str = Field(description="System operational telemetry endpoint path.")
+
+
 # =========================================================
 # 1. Health & 2. System Status Schemas
 # =========================================================
