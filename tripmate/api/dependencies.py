@@ -64,16 +64,22 @@ async def verify_api_key(
             },
         )
 
-    if expected_key and not secrets.compare_digest(provided_key, expected_key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "code": "UNAUTHORIZED",
-                "message": "Invalid API key provided.",
-            },
-        )
+    if expected_key and secrets.compare_digest(provided_key, expected_key):
+        return provided_key
 
-    return provided_key
+    # Check if provided token is a valid signed session token
+    claims = verify_token(provided_key)
+    if claims:
+        return provided_key
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={
+            "code": "UNAUTHORIZED",
+            "message": "Invalid API key or access token provided.",
+        },
+    )
+
 
 
 async def get_current_user(

@@ -53,9 +53,19 @@ def verify_password(password: str, stored_hash: str) -> bool:
         return False
 
 
+def _get_signing_secret() -> str:
+    """Returns the cryptographic signing key, requiring explicit secret in production."""
+    secret = settings.API_KEY
+    if not secret:
+        if settings.APP_ENV == "production":
+            raise RuntimeError("API_KEY must be configured in production for secure token signing.")
+        return "tripmate_platform_secret_key_2026"
+    return secret
+
+
 def generate_token(user_id: str, username: str, role: str) -> str:
     """Generates a tamper-proof HMAC-SHA256 signed bearer access token."""
-    secret = settings.API_KEY or "tripmate_platform_secret_key_2026"
+    secret = _get_signing_secret()
     payload = {
         "uid": user_id,
         "usr": username,
@@ -70,7 +80,7 @@ def generate_token(user_id: str, username: str, role: str) -> str:
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """Verifies HMAC-SHA256 signed token and returns claims payload if valid."""
     try:
-        secret = settings.API_KEY or "tripmate_platform_secret_key_2026"
+        secret = _get_signing_secret()
         parts = token.split(".", 1)
         if len(parts) != 2:
             return None
@@ -87,6 +97,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
         return payload
     except Exception:
         return None
+
 
 
 # =========================================================

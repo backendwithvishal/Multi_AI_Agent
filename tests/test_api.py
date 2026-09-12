@@ -12,15 +12,30 @@ from app import app
 
 @pytest.mark.asyncio
 async def test_root_endpoint():
-    """Tests GET / root metadata endpoint."""
+    """Tests GET / root metadata endpoint returning clean JSON for API clients."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        response = await client.get("/")
+        response = await client.get("/", headers={"Accept": "application/json"})
         assert response.status_code == 200
         data = response.json()
         assert data["service"] == "TripMate AI Multi-Agent Backend Engine"
         assert "endpoints" in data
+        assert data["status"] == "online"
+
+
+@pytest.mark.asyncio
+async def test_root_endpoint_html():
+    """Tests GET / root endpoint returning landing dashboard for browser clients."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/", headers={"Accept": "text/html,application/xhtml+xml"})
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+        assert "Systems Operational" in response.text
+        assert "Explore Swagger Docs" in response.text
+
 
 
 @pytest.mark.asyncio

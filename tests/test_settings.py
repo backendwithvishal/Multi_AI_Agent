@@ -75,3 +75,56 @@ def test_settings_initialization_defaults():
     assert s.APP_NAME == "TripMate AI Multi-Agent Backend Engine"
     assert isinstance(s.EXTERNAL_API_TIMEOUT_SECONDS, float)
     assert isinstance(s.RATE_LIMIT_REQUESTS, int)
+
+
+def test_validate_production_success(monkeypatch):
+    """Tests production validation succeeds with LLM key and API_KEY configured."""
+    s = Settings()
+    s.APP_ENV = "production"
+    s.API_KEY = "prod_secret_key_123"
+    s.GROQ_API_KEY = "gsk_test_123"
+    s.OPENROUTER_API_KEY = ""
+    s.HUGGINGFACE_API_KEY = ""
+
+    # Should not raise
+    s.validate_production()
+
+
+def test_validate_production_openrouter_alternative(monkeypatch):
+    """Tests production validation succeeds with OpenRouter key without Groq."""
+    s = Settings()
+    s.APP_ENV = "production"
+    s.API_KEY = "prod_secret_key_123"
+    s.GROQ_API_KEY = ""
+    s.OPENROUTER_API_KEY = "sk-or-test-456"
+    s.HUGGINGFACE_API_KEY = ""
+
+    # Should not raise
+    s.validate_production()
+
+
+def test_validate_production_missing_all_llms(monkeypatch):
+    """Tests production validation raises when all LLM keys are missing."""
+    s = Settings()
+    s.APP_ENV = "production"
+    s.API_KEY = "prod_secret_key_123"
+    s.GROQ_API_KEY = ""
+    s.OPENROUTER_API_KEY = ""
+    s.HUGGINGFACE_API_KEY = ""
+
+    with pytest.raises(ValueError) as exc:
+        s.validate_production()
+    assert "LLM Provider Key" in str(exc.value)
+
+
+def test_validate_production_missing_api_key(monkeypatch):
+    """Tests production validation raises when API_KEY is missing."""
+    s = Settings()
+    s.APP_ENV = "production"
+    s.API_KEY = ""
+    s.GROQ_API_KEY = "gsk_test_123"
+
+    with pytest.raises(ValueError) as exc:
+        s.validate_production()
+    assert "API_KEY" in str(exc.value)
+

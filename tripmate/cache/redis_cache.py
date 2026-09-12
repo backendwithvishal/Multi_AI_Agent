@@ -110,6 +110,28 @@ class RedisHybridCache:
             except Exception:
                 pass
 
+    async def aclose(self) -> None:
+        """Gracefully closes Redis connection pool on server shutdown."""
+        if self._use_redis and self._redis_client:
+            try:
+                if hasattr(self._redis_client, "aclose"):
+                    await self._redis_client.aclose()
+                elif hasattr(self._redis_client, "close"):
+                    res = self._redis_client.close()
+                    if inspect.isawaitable(res):
+                        await res
+            except Exception:
+                pass
+
+    def close(self) -> None:
+        """Synchronous wrapper for closing cache resources."""
+        if self._use_redis and self._redis_client:
+            try:
+                if hasattr(self._redis_client, "close"):
+                    self._redis_client.close()
+            except Exception:
+                pass
+
     def get_stats(self) -> Dict[str, Any]:
         """Returns diagnostic telemetry stats for the cache layer."""
         stats = self.in_memory.get_stats()
@@ -119,3 +141,4 @@ class RedisHybridCache:
 
 # Global hybrid cache instance
 hybrid_cache = RedisHybridCache()
+

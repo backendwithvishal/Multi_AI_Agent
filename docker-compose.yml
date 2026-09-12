@@ -13,12 +13,17 @@ services:
       - APP_ENV=development
       - LOG_LEVEL=INFO
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
       - TAVILY_API_KEY=${TAVILY_API_KEY}
       - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
       - AVIATIONSTACK_API_KEY=${AVIATIONSTACK_API_KEY}
       - DATABASE_URL=postgresql://postgres:postgres_pass@postgres_db:5432/tripmate_db
+      - REDIS_URL=redis://redis_cache:6379/0
     depends_on:
       postgres_db:
+        condition: service_healthy
+      redis_cache:
         condition: service_healthy
 
   postgres_db:
@@ -39,5 +44,20 @@ services:
       timeout: 5s
       retries: 5
 
+  redis_cache:
+    image: redis:7-alpine
+    container_name: tripmate_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   postgres_data:
+  redis_data:

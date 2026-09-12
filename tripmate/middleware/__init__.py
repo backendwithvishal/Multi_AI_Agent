@@ -60,16 +60,18 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
         max_requests: int = 30,
         window_seconds: int = 60,
         protected_prefixes: Tuple[str, ...] = ("/api/",),
+        max_tracked_ips: int = 10000,
     ):
         super().__init__(app)
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.protected_prefixes = protected_prefixes
+        self.max_tracked_ips = max_tracked_ips
         self._requests: Dict[str, List[float]] = {}
         self._last_cleanup: float = time.time()
 
-    def _cleanup_stale_records(self, now: float):
-        if now - self._last_cleanup < 300:
+    def _cleanup_stale_records(self, now: float, force: bool = False):
+        if not force and now - self._last_cleanup < 60 and len(self._requests) < self.max_tracked_ips:
             return
         self._last_cleanup = now
         window_start = now - self.window_seconds
@@ -79,6 +81,25 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
         ]
         for ip in expired_ips:
             del self._requests[ip]
+
+        # If still over capacity after expiry cleanup, evict oldest entries
+        if len(self._requests) >= self.max_tracked_ips:
+            sorted_ips = sorted(self._requests.items(), key=lambda item: item[1][-1] if item[1] else 0)
+            to_remove = len(self._requests) - (self.max_tracked_ips // 2)
+            for ip, _ in sorted_ips[:to_remove]:
+                self._requests.pop(ip, None)
+
+    def _get_client_ip(self, request: Request) -> str:
+        """Extracts client IP prioritizing reverse-proxy headers (X-Forwarded-For, X-Real-IP)."""
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            client_ip = forwarded_for.split(",")[0].strip()
+            if client_ip:
+                return client_ip
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip and real_ip.strip():
+            return real_ip.strip()
+        return request.client.host if request.client else "127.0.0.1"
 
     def _is_rate_limited(self, client_ip: str) -> Tuple[bool, int]:
         now = time.time()
@@ -99,7 +120,7 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
         if any(path.startswith(prefix) for prefix in self.protected_prefixes):
-            client_ip = request.client.host if request.client else "127.0.0.1"
+            client_ip = self._get_client_ip(request)
             is_limited, retry_after = self._is_rate_limited(client_ip)
 
             if is_limited:
@@ -119,3 +140,4 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
                 )
 
         return await call_next(request)
+

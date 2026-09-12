@@ -185,11 +185,12 @@ async def forecast_mcp_search(city: str):
 # =========================================================
 
 async def extract_destination(query: str) -> str:
-    active_llm = get_groq_llm()
-    if not active_llm:
-        raise RuntimeError("GROQ_API_KEY is missing. Add GROQ_API_KEY=your_key to .env file.")
+    """Extracts target destination using configured LLM or fallback heuristics."""
+    from tripmate.services.model_router import model_router, ModelTier
 
-    prompt = f"""
+    active_llm = model_router.get_model(ModelTier.FAST) or get_groq_llm()
+    if active_llm:
+        prompt = f"""
 Extract only the destination city or country from the travel request.
 
 Travel request:
@@ -198,10 +199,20 @@ Travel request:
 Return only the destination name.
 Do not add any explanation.
 """
-    response = await active_llm.ainvoke(prompt)
-    destination = str(response.content).strip()
+        try:
+            response = await active_llm.ainvoke(prompt)
+            destination = str(response.content).strip()
+            if destination:
+                return destination
+        except Exception:
+            pass
 
-    if not destination:
-        raise ValueError("The destination could not be extracted.")
+    # Heuristic fallback if LLM is unavailable or failed
+    words = query.strip().split()
+    for trigger in ["to", "in", "for", "visit", "visiting"]:
+        if trigger in words:
+            idx = words.index(trigger)
+            if idx + 1 < len(words):
+                return words[idx + 1].strip(".,!?;:\"'")
 
-    return destination
+    return "Destination"

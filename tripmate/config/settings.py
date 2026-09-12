@@ -144,6 +144,9 @@ class Settings:
             os.environ["LANGCHAIN_API_KEY"] = self.LANGCHAIN_API_KEY
             os.environ["LANGCHAIN_PROJECT"] = self.LANGCHAIN_PROJECT
             os.environ["LANGCHAIN_ENDPOINT"] = self.LANGCHAIN_ENDPOINT
+        else:
+            # Explicitly disable to prevent unauthorized background telemetry calls
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
 
         # PostgreSQL Database Connection String
         self.DATABASE_URL: Optional[str] = _parse_str("DATABASE_URL") or None
@@ -165,11 +168,14 @@ class Settings:
         self.LOG_LEVEL: str = _parse_str("LOG_LEVEL", "INFO").upper()
 
     def validate_production(self) -> None:
-        """Validates that mandatory API keys are present when running in production mode."""
+        """Validates that mandatory API keys and security configs are present when running in production mode."""
         if self.APP_ENV == "production":
             missing = []
-            if not self.GROQ_API_KEY:
-                missing.append("GROQ_API_KEY")
+            has_llm = bool(self.GROQ_API_KEY or self.OPENROUTER_API_KEY or self.HUGGINGFACE_API_KEY)
+            if not has_llm:
+                missing.append("At least one LLM Provider Key (GROQ_API_KEY, OPENROUTER_API_KEY, or HUGGINGFACE_API_KEY)")
+            if not self.API_KEY:
+                missing.append("API_KEY (used for authorization and token signing)")
             if missing:
                 raise ValueError(
                     f"Production startup failed! Mandatory configuration missing: {', '.join(missing)}"
@@ -178,3 +184,4 @@ class Settings:
 
 # Global singleton settings object
 settings = Settings()
+

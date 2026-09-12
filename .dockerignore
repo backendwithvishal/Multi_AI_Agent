@@ -1,7 +1,41 @@
-# Environments
+# Environments & Virtual environments
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Environment files and secrets (MANDATORY SECURITY PROTECTION)
+.env
+.env.*
+!.env.example
+
+# Git metadata
+.git/
+.gitignore
+.github/
+
+# Python byte code and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project logs and scratch files
+*.log
+scratch/
+brain.md
+evaluation/
+tests/

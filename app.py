@@ -7,8 +7,10 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError, HTTPException as FastAPIHTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from pydantic import BaseModel, Field
+
+
 
 from tripmate.config.settings import settings
 from tripmate.middleware import (
@@ -36,14 +38,29 @@ from tripmate.api.v1.routes.runs import router as runs_v1_router
 from tripmate.services.travel_service import travel_service
 
 
+import logging
+from tripmate.cache.redis_cache import hybrid_cache
+
+logger = logging.getLogger("tripmate.app")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Perform production configuration check on application startup
     try:
         settings.validate_production()
     except ValueError as exc:
-        print(f"[STARTUP WARNING] {exc}")
+        if settings.APP_ENV == "production":
+            logger.error(f"[STARTUP ERROR] {exc}")
+            raise
+        else:
+            logger.warning(f"[STARTUP WARNING] {exc}")
     yield
+    # Graceful shutdown hooks
+    try:
+        await hybrid_cache.aclose()
+    except Exception as exc:
+        logger.warning(f"[SHUTDOWN WARNING] Cache close: {exc}")
 
 
 # Initialize FastAPI web app
@@ -70,10 +87,13 @@ app.add_middleware(
     window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     protected_prefixes=("/api/",),
 )
+
+# Configure CORS: If wildcard origin is used, allow_credentials is set to False per W3C spec
+cors_allow_credentials = False if settings.ALLOWED_ORIGINS == ["*"] else True
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -131,8 +151,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def global_unhandled_exception_handler(request: Request, exc: Exception):
-    # Catch-all exception handler to prevent leaking stack traces or sensitive details to users
+    # Catch-all exception handler: log full traceback internally and return sanitized response
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
+    logger.error(
+        f"Unhandled exception on {request.method} {request.url.path} (request_id={request_id}): {exc}",
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=APIResponse(
@@ -145,6 +169,7 @@ async def global_unhandled_exception_handler(request: Request, exc: Exception):
             request_id=request_id,
         ).model_dump(),
     )
+
 
 
 
@@ -202,46 +227,204 @@ class LegacyApprovalRequest(BaseModel):
     feedback: str = ""
 
 
-# Root health & metadata endpoint
+# Root health & landing endpoint
 @app.get("/")
 async def root(request: Request):
-    """Root metadata probe describing all available backend API modules."""
+    """Production root landing dashboard & metadata probe."""
+    request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
+    accept_header = request.headers.get("accept", "")
+
+    # Return polished HTML Dashboard for browser visits
+    if "text/html" in accept_header and "application/json" not in accept_header:
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{settings.APP_NAME}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(circle at 50% 0%, #1a1f35 0%, #0a0d18 100%);
+            color: #f1f5f9;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }}
+        .card {{
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            max-width: 680px;
+            width: 100%;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(56, 189, 248, 0.1);
+        }}
+        .header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }}
+        .badge {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 600;
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }}
+        .dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }}
+        @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: .5; }} }}
+        h1 {{
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }}
+        p.subtitle {{
+            color: #94a3b8;
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }}
+        .grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }}
+        .stat-box {{
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+        }}
+        .stat-label {{ font-size: 12px; color: #64748b; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .stat-val {{ font-size: 16px; font-weight: 600; color: #e2e8f0; margin-top: 4px; }}
+        .actions {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }}
+        .btn {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }}
+        .btn-primary {{
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+        }}
+        .btn-primary:hover {{
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+            transform: translateY(-1px);
+        }}
+        .btn-secondary {{
+            background: rgba(51, 65, 85, 0.6);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+        .btn-secondary:hover {{
+            background: rgba(71, 85, 105, 0.8);
+            transform: translateY(-1px);
+        }}
+        .footer {{
+            margin-top: 28px;
+            font-size: 12px;
+            color: #64748b;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <span class="badge"><span class="dot"></span> Systems Operational</span>
+            <span style="font-size: 13px; color: #64748b;">v{settings.APP_VERSION}</span>
+        </div>
+        <h1>{settings.APP_NAME}</h1>
+        <p class="subtitle">Enterprise multi-agent autonomous travel planning backend powered by LangGraph, MCP tools, and real-time streaming.</p>
+        
+        <div class="grid">
+            <div class="stat-box">
+                <div class="stat-label">Environment</div>
+                <div class="stat-val">{settings.APP_ENV.title()}</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">API Status</div>
+                <div class="stat-val" style="color: #4ade80;">Active (v1)</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Request ID</div>
+                <div class="stat-val" style="font-family: monospace; font-size: 13px;">{request_id[:12]}...</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <a href="/docs" class="btn btn-primary" id="btn-docs">Explore Swagger Docs →</a>
+            <a href="/redoc" class="btn btn-secondary" id="btn-redoc">ReDoc Specs</a>
+            <a href="/api/v1/health" class="btn btn-secondary" id="btn-health">Health Telemetry</a>
+        </div>
+
+        <div class="footer">
+            TripMate Backend Engine • Designed for Production Resilience
+        </div>
+    </div>
+</body>
+</html>"""
+        return HTMLResponse(content=html_content, status_code=200)
+
+    # Return concise structured JSON for API clients
     return {
         "service": settings.APP_NAME,
+        "status": "online",
         "version": settings.APP_VERSION,
+        "environment": settings.APP_ENV,
         "docs_url": "/docs",
-        "request_id": getattr(request.state, "request_id", None),
+        "redoc_url": "/redoc",
+        "request_id": request_id,
         "endpoints": {
+            "docs": "/docs",
+            "redoc": "/redoc",
             "health": "GET /api/v1/health",
             "status": "GET /api/v1/status",
-            "ai_analysis": "POST /api/v1/ai/analysis",
-            "auth": "POST /api/v1/auth/login",
-            "watchlists": "GET /api/v1/watchlists",
-            "alerts": "GET /api/v1/alerts",
-            "assets": "GET /api/v1/assets",
-            "financial": "POST /api/v1/financial/calculate",
-            "admin": "GET /api/v1/admin/stats",
-            "ai": "POST /api/v1/ai/plan",
             "travel": "POST /api/v1/travel",
             "travel_stream": "POST /api/v1/travel/stream",
             "travel_approve": "POST /api/v1/travel/approve",
             "runs": "GET /api/v1/runs/{run_id}",
-            "liveness": "GET /api/v1/liveness",
-            "readiness": "GET /api/v1/readiness",
-        },
-        "modules": {
-            "health": ["GET /api/v1/health", "GET /api/v1/liveness", "GET /api/v1/readiness"],
-            "status": ["GET /api/v1/status"],
-            "ai_analysis": ["POST /api/v1/ai/analysis"],
-            "auth": ["POST /api/v1/auth/register", "POST /api/v1/auth/login", "GET /api/v1/auth/me"],
-            "watchlists": ["GET /api/v1/watchlists", "POST /api/v1/watchlists", "GET /api/v1/watchlists/{id}", "DELETE /api/v1/watchlists/{id}"],
-            "alerts": ["GET /api/v1/alerts", "POST /api/v1/alerts", "PUT /api/v1/alerts/{id}/read", "DELETE /api/v1/alerts/{id}"],
-            "assets": ["GET /api/v1/assets", "POST /api/v1/assets", "GET /api/v1/assets/{id}", "DELETE /api/v1/assets/{id}"],
-            "financial": ["POST /api/v1/financial/calculate", "POST /api/v1/financial/convert", "POST /api/v1/financial/budget-analysis"],
-            "admin": ["GET /api/v1/admin/stats", "GET /api/v1/admin/users", "POST /api/v1/admin/circuit-breakers/{name}/reset", "POST /api/v1/admin/cache/clear", "GET /api/v1/admin/runs"],
-            "ai": ["POST /api/v1/ai/plan", "POST /api/v1/ai/agents/{name}/invoke", "POST /api/v1/travel", "POST /api/v1/travel/stream", "POST /api/v1/travel/approve", "GET /api/v1/runs/{id}"],
+            "auth": "POST /api/v1/auth/login",
         },
     }
+
 
 
 # Backward-compatibility endpoint aliases
