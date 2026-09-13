@@ -366,3 +366,4 @@ class DataStore:
 
 # Shared global singleton store
 store = DataStore()
+datastore = store

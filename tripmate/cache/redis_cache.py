@@ -132,6 +132,16 @@ class RedisHybridCache:
             except Exception:
                 pass
 
+    async def ping(self) -> bool:
+        """Pings Redis backend or returns False if in-memory fallback."""
+        if self._use_redis and self._redis_client:
+            try:
+                res = await self._redis_client.ping()
+                return bool(res)
+            except Exception:
+                return False
+        return False
+
     def get_stats(self) -> Dict[str, Any]:
         """Returns diagnostic telemetry stats for the cache layer."""
         stats = self.in_memory.get_stats()

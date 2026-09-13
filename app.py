@@ -21,9 +21,10 @@ from tripmate.middleware import (
     SecurityHeadersMiddleware,
     StructuredLoggingMiddleware,
 )
+from tripmate.middleware.metrics import PrometheusMetricsMiddleware
 from tripmate.schemas import APIResponse, ErrorDetail, APIRootResponse
 
-# Import all 10 API Domain Routers
+# Import API Domain Routers
 from tripmate.api.v1.routes.health import router as health_v1_router
 from tripmate.api.v1.routes.status import router as status_v1_router
 from tripmate.api.v1.routes.ai_analysis import router as ai_analysis_v1_router
@@ -37,7 +38,11 @@ from tripmate.api.v1.routes.ai import router as ai_v1_router
 from tripmate.api.v1.routes.travel import router as travel_v1_router
 from tripmate.api.v1.routes.approval import router as approval_v1_router
 from tripmate.api.v1.routes.runs import router as runs_v1_router
+from tripmate.api.v1.routes.metrics import router as metrics_v1_router
+from tripmate.api.v1.routes.tasks import router as tasks_v1_router
+from tripmate.api.v1.routes.booking import router as booking_v1_router
 from tripmate.services.travel_service import travel_service
+from tripmate.tasks import task_queue
 
 
 import logging
@@ -57,12 +62,16 @@ async def lifespan(app: FastAPI):
             raise
         else:
             logger.warning(f"[STARTUP WARNING] {exc}")
+    
+    # Start background task queue worker
+    await task_queue.start()
     yield
     # Graceful shutdown hooks
     try:
+        await task_queue.stop()
         await hybrid_cache.aclose()
     except Exception as exc:
-        logger.warning(f"[SHUTDOWN WARNING] Cache close: {exc}")
+        logger.warning(f"[SHUTDOWN WARNING] Clean shutdown: {exc}")
 
 
 # Initialize FastAPI web app
@@ -81,6 +90,7 @@ app = FastAPI(
 
 # Register HTTP middleware chain in order of execution
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(PrometheusMetricsMiddleware)
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
@@ -176,8 +186,11 @@ async def global_unhandled_exception_handler(request: Request, exc: Exception):
 
 
 # =========================================================
-# Mount Versioned API Routes (/api/v1)
+# Mount Versioned API Routes (/api/v1) & Global Endpoints
 # =========================================================
+
+# Expose /metrics at root level for Prometheus standard scrapers
+app.include_router(metrics_v1_router)
 
 v1_router = APIRouter(prefix="/api/v1")
 
@@ -213,6 +226,15 @@ v1_router.include_router(ai_v1_router)
 v1_router.include_router(travel_v1_router)
 v1_router.include_router(approval_v1_router)
 v1_router.include_router(runs_v1_router)
+
+# 11. Monitoring Metrics (/api/v1/metrics)
+v1_router.include_router(metrics_v1_router)
+
+# 12. Background Task Queue (/api/v1/tasks)
+v1_router.include_router(tasks_v1_router)
+
+# 13. GDS Travel Booking & Search (/api/v1/booking)
+v1_router.include_router(booking_v1_router)
 
 app.include_router(v1_router)
 
@@ -326,6 +348,10 @@ async def legacy_health(request: Request):
             "ttl_mcp_caching",
             "circuit_breaker_resilience",
             "observability_runs_api",
+            "prometheus_metrics",
+            "background_task_queue",
+            "gds_booking_adapter",
+            "alembic_migrations",
         ],
     }
 

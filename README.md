@@ -14,9 +14,9 @@ Live Production Deployment: **[https://multi-ai-agent-m4g6.onrender.com/](https:
 
 ---
 
-## 🌟 10 Backend API Domain Modules
+## 🌟 13 Backend API Domain Modules
 
-The platform is structured into 10 clean, feature-driven backend API domains:
+The platform is structured into 13 clean, feature-driven backend API domains:
 
 | # | Domain Module | Route Prefix | Key Capabilities |
 |---|---|---|---|
@@ -30,6 +30,9 @@ The platform is structured into 10 clean, feature-driven backend API domains:
 | **8** | **Financial** | `/api/v1/financial` | Deterministic financial engine: itemized cost calculator, multi-currency conversion, budget variance analysis (NO LLM math) |
 | **9** | **Admin** | `/api/v1/admin` | RBAC-protected administrative endpoints: platform metrics, user management, circuit breaker reset, cache purge, execution audit |
 | **10** | **AI** | `/api/v1/ai`, `/api/v1/travel` | Task DAG planning (`/ai/plan`), direct specialist agent execution (`/ai/agents/{name}/invoke`), full multi-agent workflow & SSE streaming |
+| **11** | **Monitoring & APM** | `/metrics`, `/api/v1/metrics` | Prometheus metrics exporter recording HTTP counts, latencies, active in-flight requests, and agent durations |
+| **12** | **Background Tasks** | `/api/v1/tasks` | Asynchronous task queue worker for batch watchlist evaluations, background itineraries, and health audits |
+| **13** | **GDS Travel Booking** | `/api/v1/booking` | Live Amadeus/Skyscanner GDS flight/hotel search, 15-minute price locking, and PNR booking confirmations |
 
 ---
 
@@ -38,29 +41,31 @@ The platform is structured into 10 clean, feature-driven backend API domains:
 ```mermaid
 flowchart TD
     A[HTTP Request] --> B[FastAPI Gateway / Security Middleware]
-    B --> C[Rate Limiter & Correlation ID]
+    B --> C[Rate Limiter, Prometheus & Correlation ID]
     C --> D{Domain Route}
 
     D -->|/auth| E[Auth & RBAC Service]
-    D -->|/health, /status| F[Diagnostics & System Status]
+    D -->|/health, /status, /metrics| F[Diagnostics, System Status & APM]
     D -->|/watchlists, /alerts, /assets| G[Unified Data Store & CRUD]
     D -->|/financial| H[Deterministic Financial Engine]
     D -->|/admin| I[Admin Management & Breaker Reset]
     D -->|/travel, /ai| J[Travel Service & LangGraph Workflow]
+    D -->|/tasks| K[Async Task Queue & Background Workers]
+    D -->|/booking| L[GDS Travel Search, Price Lock & PNR Engine]
 
-    J --> K[Input Guardrails]
-    K --> L[Supervisor & Dynamic Planner]
-    L --> M[Parallel Specialists: Flight, Hotel, Weather, Budget]
-    M --> N[Critic / Validation Agent]
-    N --> O[Human-in-the-Loop Approval]
-    O --> P[Final Synthesis & Run Store]
+    J --> M[Input Guardrails]
+    M --> N[Supervisor & Dynamic Planner]
+    N --> O[Parallel Specialists: Flight, Hotel, Weather, Budget]
+    O --> P[Critic / Validation Agent]
+    P --> Q[Human-in-the-Loop Approval]
+    Q --> R[Final Synthesis & Run Store]
 ```
 
 ---
 
 ## 📊 Empirical Benchmarks & Test Suite
 
-- **Pytest Test Suite**: `39/39 (100%) passing tests`
+- **Pytest Test Suite**: `61/61 (100%) passing tests` across 12 test modules
 - **Guardrail Classification Accuracy**: `100.0%`
 - **Agent Routing Match Accuracy**: `100.0%`
 - **Parallel Fan-Out Latency Reduction**: `~57.2%`
@@ -75,6 +80,9 @@ python -m evaluation.evaluator
 
 # Run the latency fan-out benchmark
 python benchmark.py
+
+# Run database schema migrations
+alembic upgrade head
 ```
 
 ---

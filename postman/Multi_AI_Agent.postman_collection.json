@@ -726,6 +726,188 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "11. Monitoring & Metrics",
+			"item": [
+				{
+					"name": "GET /metrics (Prometheus APM Scraper)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/metrics",
+							"host": ["{{baseUrl}}"],
+							"path": ["metrics"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/metrics (Versioned Metrics Route)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/metrics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "metrics"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "12. Background Tasks & Queue",
+			"item": [
+				{
+					"name": "POST /api/v1/tasks/submit (Submit Background Job)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task_name\": \"watchlist_price_scan\",\n  \"payload\": {}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tasks/submit",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tasks", "submit"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/tasks/{task_id} (Get Task Status & Result)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tasks", "{{taskId}}"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/tasks (List Background Tasks)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tasks",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tasks"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/tasks/{task_id}/cancel (Cancel Background Task)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/tasks/{{taskId}}/cancel",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "tasks", "{{taskId}}", "cancel"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "13. GDS Travel Booking & Search",
+			"item": [
+				{
+					"name": "GET /api/v1/booking/flights/search (Search Live Flights)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/booking/flights/search?origin=JFK&destination=LHR&departure_date=2026-10-01&adults=2&cabin_class=ECONOMY",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "booking", "flights", "search"],
+							"query": [
+								{ "key": "origin", "value": "JFK" },
+								{ "key": "destination", "value": "LHR" },
+								{ "key": "departure_date", "value": "2026-10-01" },
+								{ "key": "adults", "value": "2" },
+								{ "key": "cabin_class", "value": "ECONOMY" }
+							]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/booking/hotels/search (Search Live Hotels)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/booking/hotels/search?city_code=NYC&check_in_date=2026-10-01&check_out_date=2026-10-05&guests=2&rooms=1",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "booking", "hotels", "search"],
+							"query": [
+								{ "key": "city_code", "value": "NYC" },
+								{ "key": "check_in_date", "value": "2026-10-01" },
+								{ "key": "check_out_date", "value": "2026-10-05" },
+								{ "key": "guests", "value": "2" },
+								{ "key": "rooms", "value": "1" }
+							]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/booking/price-lock (Lock Fare for 15 min)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"offer_id\": \"flt_sample_123\",\n  \"offer_type\": \"flight\",\n  \"total_price\": 700.00,\n  \"currency\": \"USD\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/booking/price-lock",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "booking", "price-lock"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/booking/reserve (Confirm Booking & Generate PNR)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{accessToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"lock_id\": \"lock_sample_123\",\n  \"passenger_name\": \"Jane Doe\",\n  \"passenger_email\": \"jane@example.com\",\n  \"special_requests\": \"Window seat\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/booking/reserve",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "booking", "reserve"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/booking/reservations/{booking_id} (Lookup Reservation)",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/booking/reservations/{{bookingId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "booking", "reservations", "{{bookingId}}"]
+						}
+					}
+				}
+			]
 		}
 	],
 	"variable": [
@@ -741,6 +923,8 @@
 		{ "key": "langchainApiKey", "value": "" },
 		{ "key": "watchlistId", "value": "wl_sample_123" },
 		{ "key": "alertId", "value": "alt_sample_123" },
-		{ "key": "assetId", "value": "ast_sample_123" }
+		{ "key": "assetId", "value": "ast_sample_123" },
+		{ "key": "taskId", "value": "task_sample_123" },
+		{ "key": "bookingId", "value": "bk_sample_123" }
 	]
 }
