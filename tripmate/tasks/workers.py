@@ -60,26 +60,31 @@ async def task_background_itinerary(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Executes a comprehensive travel plan query in the background and saves it as a Travel Asset.
     """
-    query = payload.get("query")
+    query = payload.get("query") or payload.get("message") or ""
     user_id = payload.get("user_id", "user_demo_002")
-    user_role = payload.get("user_role", "user")
+    thread_id = payload.get("thread_id")
 
-    if not query:
-        raise ValueError("Missing 'query' in background itinerary payload.")
+    if not query.strip():
+        raise ValueError("Missing 'query' or 'message' in background itinerary payload.")
 
     result = await travel_service.execute_travel_plan(
-        query=query,
+        user_input=query,
+        thread_id=thread_id,
         user_id=user_id,
-        user_role=user_role,
     )
 
-    # Save generated itinerary as an asset
-    if result.get("status") == "SUCCESS":
+    # Save generated itinerary as an asset if completed or waiting for approval
+    if result.get("status") in ("COMPLETED", "WAITING_FOR_APPROVAL", "SUCCESS"):
+        itinerary_text = result.get("itinerary") or result.get("answer") or ""
         asset = datastore.create_asset(
             user_id=user_id,
             name=f"Itinerary: {query[:50]}",
             asset_type="itinerary",
-            metadata={"final_itinerary": result.get("final_itinerary", "")},
+            metadata={
+                "final_itinerary": itinerary_text,
+                "run_id": result.get("run_id"),
+                "status": result.get("status"),
+            },
         )
         result["asset_id"] = asset["id"]
 

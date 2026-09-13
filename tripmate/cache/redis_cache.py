@@ -34,7 +34,12 @@ class RedisHybridCache:
 
         if self.redis_url and aioredis is not None:
             try:
-                self._redis_client = aioredis.from_url(self.redis_url, decode_responses=True)
+                self._redis_client = aioredis.from_url(
+                    self.redis_url,
+                    decode_responses=True,
+                    socket_timeout=1.0,
+                    socket_connect_timeout=1.0,
+                )
                 self._use_redis = True
                 print("[Cache] Redis Hybrid Cache initialized with active REDIS_URL.")
             except Exception as exc:
