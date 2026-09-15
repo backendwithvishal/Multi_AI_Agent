@@ -19,7 +19,7 @@ from langchain_core.messages import AIMessage
 
 from tripmate.graph.state import TravelState
 from tripmate.graph.routing import route_from_supervisor, ROUTE_MAP
-from tripmate.agents.guardrail import run_guardrail_check
+from tripmate.agents.guardrail import run_guardrail_check, sanitize_output
 from tripmate.agents.supervisor import run_supervisor_routing
 from tripmate.agents.critic import critic_agent
 from tripmate.agents.specialists import (
@@ -242,6 +242,7 @@ async def final_node(state: TravelState):
     reasoning_llm = model_router.get_model(ModelTier.REASONING)
 
     final_res = await run_final_agent(reasoning_llm, state["user_query"], state)
+    sanitized_res = sanitize_output(str(final_res))
     _update_latency(metrics, "final_agent", (time.time() - t0) * 1000)
 
     start_time = state.get("start_time", time.time())
@@ -249,8 +250,8 @@ async def final_node(state: TravelState):
 
     return {
         "status": "COMPLETED",
-        "final_response": final_res,
-        "messages": [AIMessage(content=final_res)],
+        "final_response": sanitized_res,
+        "messages": [AIMessage(content=sanitized_res)],
         "metrics": metrics,
     }
 

@@ -3,6 +3,10 @@ from tripmate.config.settings import settings
 from tripmate.cache.redis_cache import hybrid_cache
 from tripmate.database import check_db_health
 
+from tripmate.tasks.queue import task_queue
+from tripmate.integrations.mcp import tavily_breaker, aviation_breaker, weather_breaker
+from tripmate.integrations.gds import gds_breaker
+
 router = APIRouter(tags=["System Health & Diagnostics"])
 
 
@@ -25,13 +29,22 @@ async def health_telemetry(request: Request):
             "human_in_the_loop",
             "async_sse_streaming",
             "sliding_window_rate_limiter",
+            "distributed_redis_rate_limiting",
             "request_correlation_tracing",
             "bounded_ttl_mcp_caching",
             "circuit_breaker_resilience",
             "redis_hybrid_caching",
+            "async_task_worker_queue",
         ],
         "database": check_db_health(),
         "cache_stats": hybrid_cache.get_stats(),
+        "task_queue": task_queue.get_stats(),
+        "circuit_breakers": {
+            "tavily": tavily_breaker.get_status(),
+            "aviationstack": aviation_breaker.get_status(),
+            "openweather": weather_breaker.get_status(),
+            "gds": gds_breaker.get_status(),
+        },
     }
 
 

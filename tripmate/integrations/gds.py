@@ -218,3 +218,4 @@ class GDSBookingClient:
 
 # Global GDS client singleton
 gds_client = GDSBookingClient()
+gds_breaker = gds_client._circuit_breaker

@@ -196,5 +196,28 @@ class AsyncTaskQueue:
                 self._running_asyncio_tasks.pop(task_id, None)
 
 
+    def get_stats(self) -> Dict[str, Any]:
+        """Returns diagnostic telemetry stats for the task queue."""
+        total_tasks = len(self._tasks)
+        pending = sum(1 for t in self._tasks.values() if t.get("status") == "PENDING")
+        running = sum(1 for t in self._tasks.values() if t.get("status") == "RUNNING")
+        completed = sum(1 for t in self._tasks.values() if t.get("status") == "COMPLETED")
+        failed = sum(1 for t in self._tasks.values() if t.get("status") == "FAILED")
+        cancelled = sum(1 for t in self._tasks.values() if t.get("status") == "CANCELLED")
+
+        return {
+            "is_running": self._is_running,
+            "max_concurrent_workers": self._max_concurrent,
+            "active_workers": len(self._running_asyncio_tasks),
+            "total_tasks": total_tasks,
+            "pending_tasks": pending,
+            "running_tasks": running,
+            "completed_tasks": completed,
+            "failed_tasks": failed,
+            "cancelled_tasks": cancelled,
+            "registered_handlers": list(self._handlers.keys()),
+        }
+
+
 # Global task queue singleton
 task_queue = AsyncTaskQueue(max_concurrent_workers=4)

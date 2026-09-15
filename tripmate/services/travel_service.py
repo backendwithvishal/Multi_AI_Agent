@@ -32,8 +32,10 @@ def _interrupt_payload(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return payload if isinstance(payload, dict) else {"value": payload}
 
 
+from tripmate.services.observability import estimate_tokens, calculate_cost
+
 def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optional[str] = None) -> Dict[str, Any]:
-    """Formats internal graph dictionary into clean API response payload."""
+    """Formats internal graph dictionary into clean API response payload with token/cost tracking."""
     messages = result.get("messages", [])
     last_message = messages[-1].content if messages else ""
     answer = result.get("final_response") or last_message
@@ -43,6 +45,21 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optio
         answer = interrupt_data.get("draft_itinerary") or result.get("itinerary", "")
 
     effective_run_id = run_id or result.get("run_id") or f"run_{uuid.uuid4().hex[:12]}"
+
+    raw_metrics = result.get("metrics", {})
+    if isinstance(raw_metrics, dict):
+        query_text = result.get("user_query", "")
+        answer_text = str(answer)
+        input_tokens = estimate_tokens(query_text)
+        output_tokens = estimate_tokens(answer_text)
+        cost_usd = calculate_cost("llama-3.3-70b-versatile", input_tokens, output_tokens)
+
+        raw_metrics["token_usage"] = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
+        raw_metrics["estimated_cost_usd"] = cost_usd
 
     payload = {
         "run_id": effective_run_id,
@@ -75,7 +92,7 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optio
         "approved": result.get("approved"),
         "human_feedback": result.get("human_feedback", ""),
         "llm_calls": result.get("llm_calls", 0),
-        "metrics": result.get("metrics", {}),
+        "metrics": raw_metrics,
     }
 
     RUN_STORE[effective_run_id] = payload

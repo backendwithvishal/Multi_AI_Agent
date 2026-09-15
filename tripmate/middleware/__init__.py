@@ -101,6 +101,33 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
             return real_ip.strip()
         return request.client.host if request.client else "127.0.0.1"
 
+    async def _is_rate_limited_redis(self, client_ip: str) -> Tuple[bool, int]:
+        """Performs atomic distributed sliding window check using Redis sorted sets."""
+        from tripmate.cache.redis_cache import hybrid_cache
+        if not hybrid_cache._use_redis or not hybrid_cache._redis_client:
+            return False, 0
+
+        now = time.time()
+        window_start = now - self.window_seconds
+        cache_key = f"ratelimit:{client_ip}"
+
+        try:
+            pipe = hybrid_cache._redis_client.pipeline()
+            pipe.zremrangebyscore(cache_key, 0, window_start)
+            pipe.zcard(cache_key)
+            pipe.zadd(cache_key, {str(now): now})
+            pipe.expire(cache_key, self.window_seconds + 5)
+            results = await pipe.execute()
+
+            request_count = results[1]
+            if request_count >= self.max_requests:
+                oldest_entries = await hybrid_cache._redis_client.zrange(cache_key, 0, 0, withscores=True)
+                retry_after = int(self.window_seconds - (now - oldest_entries[0][1])) if oldest_entries else 1
+                return True, max(1, retry_after)
+            return False, 0
+        except Exception:
+            return False, 0  # Fallback gracefully to in-memory check
+
     def _is_rate_limited(self, client_ip: str) -> Tuple[bool, int]:
         now = time.time()
         self._cleanup_stale_records(now)
@@ -121,7 +148,11 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
         path = request.url.path
         if any(path.startswith(prefix) for prefix in self.protected_prefixes):
             client_ip = self._get_client_ip(request)
-            is_limited, retry_after = self._is_rate_limited(client_ip)
+
+            # Check Redis distributed rate limit first, fallback to in-memory limiter
+            is_limited, retry_after = await self._is_rate_limited_redis(client_ip)
+            if not is_limited:
+                is_limited, retry_after = self._is_rate_limited(client_ip)
 
             if is_limited:
                 request_id = getattr(request.state, "request_id", "unknown")
