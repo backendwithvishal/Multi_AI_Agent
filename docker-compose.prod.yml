@@ -1,0 +1,73 @@
+# TripMate AI — Production Docker Compose
+# Usage: docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tripmate_api_prod
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_pass}@postgres_db:5432/tripmate_db
+      - REDIS_URL=redis://redis_cache:6379/0
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      redis_cache:
+        condition: service_healthy
+    networks:
+      - tripmate_internal
+
+  postgres_db:
+    image: postgres:15-bookworm
+    container_name: tripmate_postgres_prod
+    restart: always
+    # Ports NOT exposed to host in production; accessible only via internal network
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-tripmate_db}
+      - LANG=C
+      - LC_ALL=C
+      - POSTGRES_INITDB_ARGS=--locale=C --encoding=UTF-8 --auth-local=scram-sha-256 --auth-host=scram-sha-256
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tripmate_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tripmate_internal
+
+  redis_cache:
+    image: redis:7-alpine
+    container_name: tripmate_redis_prod
+    restart: always
+    # Ports NOT exposed to host in production; accessible only via internal network
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru", "--save", "900", "1"]
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - tripmate_internal
+
+networks:
+  tripmate_internal:
+    driver: bridge
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:

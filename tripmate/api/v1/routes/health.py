@@ -60,20 +60,35 @@ async def liveness_probe():
 @router.get(
     "/readiness",
     summary="Service Readiness Probe",
-    description="Readiness probe verifying database connectivity and configuration readiness.",
+    description="Readiness probe verifying database and cache connectivity and configuration readiness.",
 )
 async def readiness_probe(response: Response):
     db_health = check_db_health()
-    if settings.APP_ENV == "production" and db_health.get("status") == "unhealthy":
+    cache_ping = await hybrid_cache.ping()
+    is_ready = True
+    reasons = []
+
+    if settings.APP_ENV == "production":
+        if db_health.get("status") == "unhealthy":
+            is_ready = False
+            reasons.append("Database connection probe failed.")
+        if hybrid_cache._use_redis and not cache_ping:
+            is_ready = False
+            reasons.append("Redis cache connection probe failed.")
+
+    if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {
             "status": "not_ready",
-            "reason": "Database connection probe failed in production environment.",
+            "reasons": reasons,
             "database": db_health,
+            "cache_connected": cache_ping,
         }
 
     return {
         "status": "ready",
         "service": settings.APP_NAME,
         "database": db_health,
+        "cache_connected": cache_ping,
     }
+

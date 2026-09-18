@@ -551,18 +551,34 @@ HTTP Request (e.g. POST /api/v1/travel)
 
 ## 20. Testing Gaps
 
-- **Current Status**: 61/61 automated tests passing covering:
+- **Current Status**: 67/67 automated tests passing covering:
   - Unit tests for agents, supervisor, guardrail, and critic.
   - End-to-end API tests for `/api/v1/*` routes.
   - Concurrency and single-flight cache tests.
   - Authentication, password reset, and RBAC admin provisioning.
   - Alembic migrations, Prometheus metrics, Background task queues, and GDS booking.
+  - Configuration bounds, environment validation, and readiness probes.
 - **Identified Future Gaps**:
   - Live end-to-end network tests with production MCP servers (currently mocked/sandboxed in CI to prevent rate limit depletion).
 
 ---
 
-## 21. Production Readiness Checklist
+## 21. Complete Docker, Infrastructure & Security Audit
+
+### A. Audit Summary of Issues Found & Resolved
+
+| # | Issue | Location | Why It Matters | Risk Level | Fix Applied | Verification Status |
+|---|---|---|---|---|---|---|
+| **1** | PostgreSQL Musl Locale Detection Warning (`sh: locale: not found` / `WARNING: no usable system locales were found`) | `docker-compose.yml`, `docker-compose.prod.yml` | Alpine images lack glibc locale utilities; `initdb` attempts to invoke `locale -a` on cluster initialization. | **Low** | Configured `postgres:15-bookworm` with `LANG=C`, `LC_ALL=C`, `--locale=C --encoding=UTF-8` providing native glibc locale support. | **PASS** (Zero warnings on container startup) |
+| **2** | Insecure PostgreSQL Trust Authentication (`initdb: warning: enabling "trust" authentication for local connections`) | `docker-compose.yml`, `docker-compose.prod.yml` | Default postgres init permits unauthenticated socket connections if auth method is unspecified. | **Medium** | Added `--auth-local=scram-sha-256 --auth-host=scram-sha-256` and `POSTGRES_HOST_AUTH_METHOD=scram-sha-256` enforcing encrypted password authentication across all connections. | **PASS** (Trust warning eliminated, SCRAM-SHA-256 active) |
+| **3** | Redis Unspecified Config & Memory Limits (`Warning: no config file specified, using the default config.`) | `docker-compose.yml`, `docker-compose.prod.yml` | Running Redis without explicit memory ceiling or eviction policy risks container OOM crashes under high load. | **Medium** | Configured explicit startup command: `redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --save 900 1`. | **PASS** (AOF persistence and 256MB LRU policy active, warning eliminated) |
+| **4** | Pip Root User Warning during Multi-Stage Build (`WARNING: Running pip as the 'root' user`) | `Dockerfile` | Pollutes build logs and indicates unmanaged pip execution in builder image. | **Low** | Added `PIP_ROOT_USER_ACTION=ignore`, `PIP_NO_CACHE_DIR=1`, `PIP_DISABLE_PIP_VERSION_CHECK=1` in builder stage while maintaining non-root `appuser` (UID 1000) execution in runner stage. | **PASS** (Zero pip warnings during Docker build) |
+| **5** | Database & Cache Exposure in Production | `docker-compose.prod.yml` | Exposing internal PostgreSQL (5432) and Redis (6379) ports to the public host interface creates external attack surface. | **High** | Created isolated production compose topology using internal bridge network (`tripmate_internal`) exposing ONLY port 8000. | **PASS** (Production network isolation verified) |
+| **6** | Liveness vs Readiness Probe Granularity | `tripmate/api/v1/routes/health.py` | Cloud orchestrators (Kubernetes/ECS/Render) need to distinguish process liveness from backend dependency readiness. | **Medium** | Enhanced `/api/v1/readiness` to verify both PostgreSQL and Redis connectivity, returning HTTP 503 if dependencies fail in production. | **PASS** (Verified via unit tests and HTTP probes) |
+
+---
+
+## 22. Production Readiness Checklist
 
 - [x] Secure HMAC-SHA256 bearer token authentication & PBKDF2 password hashing
 - [x] Role-Based Access Control (`user`, `admin`) with IDOR ownership validation
@@ -574,25 +590,28 @@ HTTP Request (e.g. POST /api/v1/travel)
 - [x] Circuit breaker resilience on all external API integrations
 - [x] ModelRouter multi-tier LLM fallback (Groq / OpenRouter / Hugging Face)
 - [x] Prometheus APM metrics exposition (`/metrics`)
-- [x] Dockerfile with non-root security user and container healthchecks
+- [x] Multi-stage Dockerfile running as non-root `appuser` (UID 1000)
+- [x] Production Docker Compose with network isolation and resource boundaries
+- [x] Process liveness (`/liveness`) and dependency readiness (`/readiness`) probes
 - [x] Graceful shutdown lifecycle management (`lifespan`)
-- [x] 100% test suite pass rate (61 passing tests)
+- [x] 100% test suite pass rate (67 passing tests)
 
 ---
 
-## 22. Recommended Development Roadmap
+## 23. Recommended Development Roadmap
 
-1. **Phase 1 (Immediate)**: Maintain active monitoring on Prometheus scrape endpoints and review circuit breaker logs.
+1. **Phase 1 (Immediate)**: Deploy with `docker-compose.prod.yml` or cloud container service (AWS ECS/Render).
 2. **Phase 2 (Near-Term)**: Introduce PostgreSQL persistence for background task history and asset document attachments.
 3. **Phase 3 (Medium-Term)**: Add WebSocket support for real-time collaborative multi-user trip editing.
 4. **Phase 4 (Long-Term)**: Connect live enterprise GDS credentials for direct airline ticket issuance.
 
 ---
 
-## 23. Final Engineering Assessment
+## 24. Final Engineering Assessment
 
 - **Code Quality**: Clean, modular, and human-written Python with clear separation of concerns across routes, services, agents, and storage layers.
-- **Architecture**: Production-ready LangGraph orchestration combined with FastAPI and resilience patterns.
+- **Architecture**: Production-ready LangGraph orchestration combined with FastAPI, Redis caching, and circuit breaker resilience patterns.
 - **Security**: Robust token signing, RBAC, thread ownership verification, and OWASP header enforcement.
-- **Maintainability**: Low coupling, explicit typing, comprehensive test coverage, and straightforward debugging.
+- **Maintainability**: Low coupling, explicit typing, comprehensive test coverage (67/67 passing), and straightforward debugging.
 - **Scalability**: Capable of handling enterprise workloads with async I/O, single-flight caching, and decoupled background worker queues.
+

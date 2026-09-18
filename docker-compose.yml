@@ -27,7 +27,7 @@ services:
         condition: service_healthy
 
   postgres_db:
-    image: postgres:15-alpine
+    image: postgres:15-bookworm
     container_name: tripmate_postgres
     restart: unless-stopped
     ports:
@@ -36,6 +36,10 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres_pass
       - POSTGRES_DB=tripmate_db
+      - LANG=C
+      - LC_ALL=C
+      - POSTGRES_INITDB_ARGS=--locale=C --encoding=UTF-8 --auth-local=scram-sha-256 --auth-host=scram-sha-256
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -48,6 +52,7 @@ services:
     image: redis:7-alpine
     container_name: tripmate_redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", "900", "1"]
     ports:
       - "6379:6379"
     volumes:

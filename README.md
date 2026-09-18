@@ -283,9 +283,24 @@ python benchmark.py
 ```
 
 ### 6. Run with Docker Compose
+
+#### Local Development (API + Postgres + Redis with exposed ports):
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
+- API: `http://localhost:8000`
+- Docs: `http://localhost:8000/docs`
+- Postgres: `localhost:5432`
+- Redis: `localhost:6379`
+
+#### Production Mode (Internal network isolation, non-root user, secure auth):
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+- API: `http://localhost:8000` (PostgreSQL and Redis ports are isolated from public exposure)
+- Liveness Probe: `GET http://localhost:8000/api/v1/liveness`
+- Readiness Probe: `GET http://localhost:8000/api/v1/readiness`
+- Telemetry & Health: `GET http://localhost:8000/api/v1/health`
 
 ---
 
