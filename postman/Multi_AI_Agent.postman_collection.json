@@ -2,15 +2,130 @@
 	"info": {
 		"_postman_id": "a7e1f4b8-392a-4c28-9d8e-123456789abc",
 		"name": "TripMate AI Multi-Agent Backend API",
-		"description": "Postman API Collection covering all 10 domain backend API modules for TripMate AI Multi-Agent Platform.",
+		"description": "Production Postman API Collection covering all 15 domain backend API modules, observability runs, background tasks, GDS booking adapters, and legacy aliases for TripMate AI Multi-Agent Platform.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
+		{
+			"name": "0. Root & Entrypoints",
+			"item": [
+				{
+					"name": "GET / (API Information & Navigation Metadata)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('API Root Metadata Present', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('name');",
+									"    pm.expect(jsonData).to.have.property('version');",
+									"    pm.expect(jsonData).to.have.property('status');",
+									"    pm.expect(jsonData).to.have.property('api_base');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/",
+							"host": ["{{baseUrl}}"],
+							"path": [""]
+						}
+					}
+				},
+				{
+					"name": "GET /health (Legacy Feature Telemetry)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Status is ok and features list present', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql('ok');",
+									"    pm.expect(jsonData.features).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "GET /metrics (Prometheus APM Scraper)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Prometheus metric headers present', function () {",
+									"    pm.expect(pm.response.text()).to.include('http_requests_total');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/metrics",
+							"host": ["{{baseUrl}}"],
+							"path": ["metrics"]
+						}
+					}
+				}
+			]
+		},
 		{
 			"name": "1. Health & Diagnostics",
 			"item": [
 				{
 					"name": "GET /api/v1/health (Detailed Health Telemetry)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Database, Circuit Breakers and Cache stats present', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql('ok');",
+									"    pm.expect(jsonData).to.have.property('circuit_breakers');",
+									"    pm.expect(jsonData).to.have.property('cache_stats');",
+									"    pm.expect(jsonData).to.have.property('database');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -23,6 +138,23 @@
 				},
 				{
 					"name": "GET /api/v1/liveness (Process Liveness Probe)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Liveness status alive', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql('alive');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -35,6 +167,24 @@
 				},
 				{
 					"name": "GET /api/v1/readiness (Service Readiness Probe)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 or 503', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 503]);",
+									"});",
+									"pm.test('Readiness probe contains status payload', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status');",
+									"    pm.expect(jsonData).to.have.property('database');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [],
@@ -66,8 +216,7 @@
 									"    pm.expect(jsonData.data).to.have.property('status');",
 									"    pm.expect(jsonData.data).to.have.property('model_tiers');",
 									"    pm.expect(jsonData.data).to.have.property('circuit_breakers');",
-									"    console.log('Model Tiers:', jsonData.data.model_tiers);",
-									"    console.log('Circuit Breakers:', jsonData.data.circuit_breakers);",
+									"    pm.expect(jsonData.data).to.have.property('agent_registry');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -91,6 +240,26 @@
 			"item": [
 				{
 					"name": "POST /api/v1/ai/analysis (Analyze Travel Plan & Feasibility)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Analysis quality score and recommendations returned', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('is_feasible');",
+									"    pm.expect(jsonData.data).to.have.property('quality_score');",
+									"    pm.expect(jsonData.data).to.have.property('recommendations');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -99,7 +268,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"query\": \"Plan a 5-day trip to Tokyo under $2000 with cultural sights\",\n  \"budget\": 2000.0,\n  \"destination\": \"Tokyo\"\n}"
+							"raw": "{\n  \"query\": \"Plan a 5-day trip to Tokyo under $2000 with cultural sights\",\n  \"itinerary\": \"Day 1: Asakusa & Senso-ji\\nDay 2: Shibuya & Shinjuku\\nDay 3: Akihabara & Ueno\\nDay 4: Mount Fuji Day Trip\\nDay 5: Ginza & Departure\",\n  \"budget\": 2000.0,\n  \"destination\": \"Tokyo\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/ai/analysis",
@@ -123,7 +292,14 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.access_token) {",
 									"    pm.environment.set(\"accessToken\", jsonData.data.access_token);",
-									"}"
+									"}",
+									"if (jsonData && jsonData.data && jsonData.data.user_id) {",
+									"    pm.environment.set(\"userId\", jsonData.data.user_id);",
+									"}",
+									"pm.test('Registration returns access token and user_id', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('access_token');",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -131,7 +307,9 @@
 					],
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"username\": \"jane_traveler\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"role\": \"user\"\n}"
@@ -153,7 +331,14 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.access_token) {",
 									"    pm.environment.set(\"accessToken\", jsonData.data.access_token);",
-									"}"
+									"}",
+									"if (jsonData && jsonData.data && jsonData.data.user_id) {",
+									"    pm.environment.set(\"userId\", jsonData.data.user_id);",
+									"}",
+									"pm.test('Login returns bearer access token', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data.access_token).to.be.a('string');",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -183,7 +368,10 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.reset_token) {",
 									"    pm.environment.set(\"resetToken\", jsonData.data.reset_token);",
-									"}"
+									"}",
+									"pm.test('Password reset request accepted', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -205,6 +393,20 @@
 				},
 				{
 					"name": "POST /api/v1/auth/reset-password (Reset Password)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Password reset successful', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -221,6 +423,22 @@
 				},
 				{
 					"name": "GET /api/v1/auth/me (Current User Profile)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Profile retrieved', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('username');",
+									"    pm.expect(jsonData.data).to.have.property('email');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
@@ -258,7 +476,11 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.id) {",
 									"    pm.environment.set(\"watchlistId\", jsonData.data.id);",
-									"}"
+									"}",
+									"pm.test('Watchlist item created', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -332,7 +554,11 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.id) {",
 									"    pm.environment.set(\"alertId\", jsonData.data.id);",
-									"}"
+									"}",
+									"pm.test('Alert rule created', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -406,7 +632,11 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.id) {",
 									"    pm.environment.set(\"assetId\", jsonData.data.id);",
-									"}"
+									"}",
+									"pm.test('Travel asset registered', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('id');",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -460,6 +690,23 @@
 			"item": [
 				{
 					"name": "POST /api/v1/financial/calculate (Itemized Cost Breakdown)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Cost breakdown calculated', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('grand_total');",
+									"    pm.expect(jsonData.data).to.have.property('taxes_and_fees');",
+									"    pm.expect(jsonData.data).to.have.property('contingency_buffer');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -479,6 +726,22 @@
 				},
 				{
 					"name": "POST /api/v1/financial/convert (Currency Converter)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Currency converted successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('converted_amount');",
+									"    pm.expect(jsonData.data).to.have.property('exchange_rate');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -498,6 +761,22 @@
 				},
 				{
 					"name": "POST /api/v1/financial/budget-analysis (Budget Variance)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Budget variance analyzed', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('is_within_budget');",
+									"    pm.expect(jsonData.data).to.have.property('utilization_pct');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -606,6 +885,21 @@
 			"item": [
 				{
 					"name": "POST /api/v1/ai/plan (Generate Dynamic Task DAG)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Task DAG plan generated', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('tasks');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -625,6 +919,21 @@
 				},
 				{
 					"name": "POST /api/v1/ai/agents/{name}/invoke (Direct Agent Execution)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Specialist agent invoked successfully', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('status');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -652,7 +961,14 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.run_id) {",
 									"    pm.environment.set(\"runId\", jsonData.data.run_id);",
-									"}"
+									"}",
+									"if (jsonData && jsonData.data && jsonData.data.thread_id) {",
+									"    pm.environment.set(\"threadId\", jsonData.data.thread_id);",
+									"}",
+									"pm.test('Travel execution returns valid run_id', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('run_id');",
+									"});"
 								],
 								"type": "text/javascript"
 							}
@@ -666,7 +982,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"message\": \"Plan a 5-day trip to Paris under $2000\",\n  \"thread_id\": \"test_thread_101\"\n}"
+							"raw": "{\n  \"message\": \"Plan a 5-day trip to Paris under $2000\",\n  \"thread_id\": \"test_thread_101\",\n  \"user_id\": \"{{userId}}\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/travel",
@@ -685,7 +1001,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"message\": \"Plan a 3-day trip to Tokyo\",\n  \"thread_id\": \"test_thread_102\"\n}"
+							"raw": "{\n  \"message\": \"Plan a 3-day trip to Tokyo\",\n  \"thread_id\": \"test_thread_102\",\n  \"user_id\": \"{{userId}}\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/travel/stream",
@@ -696,6 +1012,20 @@
 				},
 				{
 					"name": "POST /api/v1/travel/approve (HITL Approval)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Approval response returned', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -704,7 +1034,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"thread_id\": \"test_thread_101\",\n  \"approved\": true,\n  \"feedback\": \"Itinerary looks great!\"\n}"
+							"raw": "{\n  \"thread_id\": \"test_thread_101\",\n  \"approved\": true,\n  \"feedback\": \"Itinerary looks great!\",\n  \"user_id\": \"{{userId}}\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/travel/approve",
@@ -712,9 +1042,27 @@
 							"path": ["api", "v1", "travel", "approve"]
 						}
 					}
-				},
+				}
+			]
+		},
+		{
+			"name": "11. Workflow Observability, Runs & Replay",
+			"item": [
 				{
 					"name": "GET /api/v1/runs/{run_id} (Run Details & Observability)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
@@ -724,11 +1072,86 @@
 							"path": ["api", "v1", "runs", "{{runId}}"]
 						}
 					}
+				},
+				{
+					"name": "GET /api/v1/runs/{run_id}/metrics (Run Latency, Tokens & Cost)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/runs/{{runId}}/metrics",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "runs", "{{runId}}", "metrics"]
+						}
+					}
+				},
+				{
+					"name": "GET /api/v1/runs/{run_id}/agents (Agent Outputs & Evidence)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/runs/{{runId}}/agents",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "runs", "{{runId}}", "agents"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/v1/runs/{run_id}/replay (Replay Workflow Execution)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/runs/{{runId}}/replay",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "runs", "{{runId}}", "replay"]
+						}
+					}
 				}
 			]
 		},
 		{
-			"name": "11. Monitoring & Metrics",
+			"name": "12. Monitoring & Metrics",
 			"item": [
 				{
 					"name": "GET /metrics (Prometheus APM Scraper)",
@@ -757,10 +1180,28 @@
 			]
 		},
 		{
-			"name": "12. Background Tasks & Queue",
+			"name": "13. Background Tasks & Queue",
 			"item": [
 				{
 					"name": "POST /api/v1/tasks/submit (Submit Background Job)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.task_id) {",
+									"    pm.environment.set(\"taskId\", jsonData.data.task_id);",
+									"}",
+									"pm.test('Background task submitted', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('task_id');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -817,10 +1258,25 @@
 			]
 		},
 		{
-			"name": "13. GDS Travel Booking & Search",
+			"name": "14. GDS Travel Booking & Search",
 			"item": [
 				{
 					"name": "GET /api/v1/booking/flights/search (Search Live Flights)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Flights search returned results', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('flight_offers');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
@@ -840,6 +1296,21 @@
 				},
 				{
 					"name": "GET /api/v1/booking/hotels/search (Search Live Hotels)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Hotels search returned results', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('hotel_offers');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
@@ -859,6 +1330,24 @@
 				},
 				{
 					"name": "POST /api/v1/booking/price-lock (Lock Fare for 15 min)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.lock_id) {",
+									"    pm.environment.set(\"lockId\", jsonData.data.lock_id);",
+									"}",
+									"pm.test('Price locked for 15 minutes', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('lock_id');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -878,6 +1367,24 @@
 				},
 				{
 					"name": "POST /api/v1/booking/reserve (Confirm Booking & Generate PNR)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.booking_id) {",
+									"    pm.environment.set(\"bookingId\", jsonData.data.booking_id);",
+									"}",
+									"pm.test('Reservation created with PNR', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data).to.have.property('pnr');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -886,7 +1393,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"lock_id\": \"lock_sample_123\",\n  \"passenger_name\": \"Jane Doe\",\n  \"passenger_email\": \"jane@example.com\",\n  \"special_requests\": \"Window seat\"\n}"
+							"raw": "{\n  \"lock_id\": \"{{lockId}}\",\n  \"passenger_name\": \"Jane Doe\",\n  \"passenger_email\": \"jane@example.com\",\n  \"special_requests\": \"Window seat\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/v1/booking/reserve",
@@ -897,6 +1404,19 @@
 				},
 				{
 					"name": "GET /api/v1/booking/reservations/{booking_id} (Lookup Reservation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "GET",
 						"header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
@@ -908,23 +1428,115 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "15. Legacy Aliases (Backward Compatibility)",
+			"item": [
+				{
+					"name": "POST /api/travel (Legacy Travel Endpoint)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Legacy travel endpoint responded', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Plan a 3-day trip to Paris under $1500\",\n  \"thread_id\": \"legacy_thread_101\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/travel",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "travel"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/travel/stream (Legacy Stream Endpoint)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"Plan a weekend in Rome\",\n  \"thread_id\": \"legacy_stream_101\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/travel/stream",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "travel", "stream"]
+						}
+					}
+				},
+				{
+					"name": "POST /api/travel/approve (Legacy Approval Endpoint)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Legacy approval endpoint executed', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"thread_id\": \"legacy_thread_101\",\n  \"approved\": true,\n  \"feedback\": \"Approved with thanks\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/travel/approve",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "travel", "approve"]
+						}
+					}
+				}
+			]
 		}
 	],
 	"variable": [
 		{ "key": "baseUrl", "value": "http://127.0.0.1:8000" },
 		{ "key": "accessToken", "value": "" },
 		{ "key": "adminAccessToken", "value": "" },
+		{ "key": "userId", "value": "usr_sample_123" },
+		{ "key": "threadId", "value": "user_session_101" },
+		{ "key": "runId", "value": "run_sample_101" },
+		{ "key": "watchlistId", "value": "wl_sample_123" },
+		{ "key": "alertId", "value": "alt_sample_123" },
+		{ "key": "assetId", "value": "ast_sample_123" },
+		{ "key": "taskId", "value": "task_sample_123" },
+		{ "key": "lockId", "value": "lock_sample_123" },
+		{ "key": "bookingId", "value": "bk_sample_123" },
+		{ "key": "resetToken", "value": "reset_token_sample" },
 		{ "key": "groqApiKey", "value": "" },
 		{ "key": "openrouterApiKey", "value": "sk-or-v1-" },
 		{ "key": "huggingfaceApiKey", "value": "" },
 		{ "key": "tavilyApiKey", "value": "tvly-dev-kFj2z-" },
 		{ "key": "openweatherApiKey", "value": "" },
 		{ "key": "aviationstackApiKey", "value": "" },
-		{ "key": "langchainApiKey", "value": "" },
-		{ "key": "watchlistId", "value": "wl_sample_123" },
-		{ "key": "alertId", "value": "alt_sample_123" },
-		{ "key": "assetId", "value": "ast_sample_123" },
-		{ "key": "taskId", "value": "task_sample_123" },
-		{ "key": "bookingId", "value": "bk_sample_123" }
+		{ "key": "langchainApiKey", "value": "" }
 	]
 }
