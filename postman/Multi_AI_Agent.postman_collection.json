@@ -292,9 +292,11 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.access_token) {",
 									"    pm.environment.set(\"accessToken\", jsonData.data.access_token);",
+									"    pm.collectionVariables.set(\"accessToken\", jsonData.data.access_token);",
 									"}",
 									"if (jsonData && jsonData.data && jsonData.data.user_id) {",
 									"    pm.environment.set(\"userId\", jsonData.data.user_id);",
+									"    pm.collectionVariables.set(\"userId\", jsonData.data.user_id);",
 									"}",
 									"pm.test('Registration returns access token and user_id', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -331,9 +333,11 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.access_token) {",
 									"    pm.environment.set(\"accessToken\", jsonData.data.access_token);",
+									"    pm.collectionVariables.set(\"accessToken\", jsonData.data.access_token);",
 									"}",
 									"if (jsonData && jsonData.data && jsonData.data.user_id) {",
 									"    pm.environment.set(\"userId\", jsonData.data.user_id);",
+									"    pm.collectionVariables.set(\"userId\", jsonData.data.user_id);",
 									"}",
 									"pm.test('Login returns bearer access token', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -359,6 +363,42 @@
 					}
 				},
 				{
+					"name": "POST /api/v1/auth/login (Admin Login)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData && jsonData.data && jsonData.data.access_token) {",
+									"    pm.environment.set(\"adminAccessToken\", jsonData.data.access_token);",
+									"    pm.collectionVariables.set(\"adminAccessToken\", jsonData.data.access_token);",
+									"}",
+									"pm.test('Admin login returns admin bearer token', function () {",
+									"    pm.expect(jsonData.success).to.eql(true);",
+									"    pm.expect(jsonData.data.role).to.eql('admin');",
+									"    pm.expect(jsonData.data.access_token).to.be.a('string');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username_or_email\": \"admin\",\n  \"password\": \"Admin@12345\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "login"]
+						}
+					}
+				},
+				{
 					"name": "POST /api/v1/auth/forgot-password (Request Password Reset)",
 					"event": [
 						{
@@ -368,6 +408,7 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.reset_token) {",
 									"    pm.environment.set(\"resetToken\", jsonData.data.reset_token);",
+									"    pm.collectionVariables.set(\"resetToken\", jsonData.data.reset_token);",
 									"}",
 									"pm.test('Password reset request accepted', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -476,6 +517,7 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.id) {",
 									"    pm.environment.set(\"watchlistId\", jsonData.data.id);",
+									"    pm.collectionVariables.set(\"watchlistId\", jsonData.data.id);",
 									"}",
 									"pm.test('Watchlist item created', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -554,6 +596,7 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.id) {",
 									"    pm.environment.set(\"alertId\", jsonData.data.id);",
+									"    pm.collectionVariables.set(\"alertId\", jsonData.data.id);",
 									"}",
 									"pm.test('Alert rule created', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -632,6 +675,7 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.id) {",
 									"    pm.environment.set(\"assetId\", jsonData.data.id);",
+									"    pm.collectionVariables.set(\"assetId\", jsonData.data.id);",
 									"}",
 									"pm.test('Travel asset registered', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -961,9 +1005,11 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.run_id) {",
 									"    pm.environment.set(\"runId\", jsonData.data.run_id);",
+									"    pm.collectionVariables.set(\"runId\", jsonData.data.run_id);",
 									"}",
 									"if (jsonData && jsonData.data && jsonData.data.thread_id) {",
 									"    pm.environment.set(\"threadId\", jsonData.data.thread_id);",
+									"    pm.collectionVariables.set(\"threadId\", jsonData.data.thread_id);",
 									"}",
 									"pm.test('Travel execution returns valid run_id', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -1192,6 +1238,7 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.task_id) {",
 									"    pm.environment.set(\"taskId\", jsonData.data.task_id);",
+									"    pm.collectionVariables.set(\"taskId\", jsonData.data.task_id);",
 									"}",
 									"pm.test('Background task submitted', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -1338,6 +1385,7 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.lock_id) {",
 									"    pm.environment.set(\"lockId\", jsonData.data.lock_id);",
+									"    pm.collectionVariables.set(\"lockId\", jsonData.data.lock_id);",
 									"}",
 									"pm.test('Price locked for 15 minutes', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
@@ -1375,6 +1423,7 @@
 									"var jsonData = pm.response.json();",
 									"if (jsonData && jsonData.data && jsonData.data.booking_id) {",
 									"    pm.environment.set(\"bookingId\", jsonData.data.booking_id);",
+									"    pm.collectionVariables.set(\"bookingId\", jsonData.data.booking_id);",
 									"}",
 									"pm.test('Reservation created with PNR', function () {",
 									"    pm.expect(jsonData.success).to.eql(true);",
