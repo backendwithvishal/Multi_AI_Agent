@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Type
 from pydantic import BaseModel
 
 from tripmate.schemas.agents import StructuredAgentOutput
+from tripmate.core.singleton import SingletonMeta
 
 
 class AgentMetadata(BaseModel):
@@ -43,7 +44,7 @@ class BaseAgent(ABC):
         pass
 
 
-class AgentRegistry:
+class AgentRegistry(metaclass=SingletonMeta):
     """Thread-safe registry for agent discovery and dynamic instantiation."""
 
     def __init__(self):

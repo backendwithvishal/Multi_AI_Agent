@@ -30,6 +30,8 @@ from tripmate.integrations.mcp import (
     safe_extract_destination,
 )
 from tripmate.cache.redis_cache import hybrid_cache
+from tripmate.adapters import WeatherServiceAdapter, FlightServiceAdapter, TavilySearchAdapter
+from tripmate.factories.agent_factory import AgentFactory
 
 
 # =========================================================
@@ -186,25 +188,19 @@ class WeatherAgent(BaseAgent):
         t0 = time.time()
         try:
             city = await safe_extract_destination(query)
-            weather_data = await hybrid_cache.get_or_set(
+            raw_weather = await hybrid_cache.get_or_set(
                 "weather_search",
                 city,
                 lambda: safe_weather_search(city),
             )
+            weather_data = WeatherServiceAdapter.adapt_weather_response(city, str(raw_weather))
+            evidence = WeatherServiceAdapter.create_evidence_item(weather_data)
             return StructuredAgentOutput(
                 agent_name=self.name,
                 status="success",
-                result=str(weather_data),
-                confidence=0.95,
-                sources=[
-                    EvidenceItem(
-                        source_name="OpenWeather FastMCP",
-                        source_type=EvidenceType.API,
-                        status=VerificationStatus.VERIFIED,
-                        confidence=0.95,
-                        details=f"Weather metrics retrieved for {city}.",
-                    )
-                ],
+                result=str(raw_weather),
+                confidence=evidence.confidence,
+                sources=[evidence],
                 execution_time_ms=round((time.time() - t0) * 1000, 2),
             )
         except Exception as exc:
@@ -372,12 +368,18 @@ Create a clear, practical day-by-day draft itinerary ready for human review.
             )
 
 
-# Register agent singletons into AgentRegistry
-flight_agent_obj = FlightAgent()
-hotel_agent_obj = HotelAgent()
-weather_agent_obj = WeatherAgent()
-budget_agent_obj = BudgetAgent()
-itinerary_agent_obj = ItineraryAgent()
+# Register agent classes with AgentFactory and instantiate into AgentRegistry
+AgentFactory.register_agent_class("flight_agent", FlightAgent)
+AgentFactory.register_agent_class("hotel_agent", HotelAgent)
+AgentFactory.register_agent_class("weather_agent", WeatherAgent)
+AgentFactory.register_agent_class("budget_agent", BudgetAgent)
+AgentFactory.register_agent_class("itinerary_agent", ItineraryAgent)
+
+flight_agent_obj = AgentFactory.create_agent("flight_agent")
+hotel_agent_obj = AgentFactory.create_agent("hotel_agent")
+weather_agent_obj = AgentFactory.create_agent("weather_agent")
+budget_agent_obj = AgentFactory.create_agent("budget_agent")
+itinerary_agent_obj = AgentFactory.create_agent("itinerary_agent")
 
 agent_registry.register(flight_agent_obj)
 agent_registry.register(hotel_agent_obj)

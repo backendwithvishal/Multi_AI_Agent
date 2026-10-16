@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 from tripmate.config.settings import settings
+from tripmate.core.singleton import SingletonMeta
 
 
 # =========================================================
@@ -104,7 +105,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
 # Unified Data Repository
 # =========================================================
 
-class DataStore:
+class DataStore(metaclass=SingletonMeta):
     """Thread-safe unified data store managing platform entities."""
 
     def __init__(self):

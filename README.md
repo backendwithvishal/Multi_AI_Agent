@@ -1,7 +1,7 @@
 # Multi_AI_Agent — Production-Grade Multi-Agent AI Orchestration Platform
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/backendwithvishal/Multi_AI_Agent)
-[![Tests](https://img.shields.io/badge/tests-67%2F67%20passing%20(100%25)-success)](https://github.com/backendwithvishal/Multi_AI_Agent)
+[![Tests](https://img.shields.io/badge/tests-93%2F93%20passing%20(100%25)-success)](https://github.com/backendwithvishal/Multi_AI_Agent)
 [![Render Deployment](https://img.shields.io/badge/render-live--deployment-success)](https://multi-ai-agent-m4g6.onrender.com/)
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688)](https://fastapi.tiangolo.com)
@@ -15,7 +15,27 @@ An enterprise-grade **Multi-Agent AI Orchestration Platform** built with **LangG
 
 🌐 **Live Production Deployment**: [https://multi-ai-agent-m4g6.onrender.com/](https://multi-ai-agent-m4g6.onrender.com/)  
 📖 **Interactive API Documentation**: [https://multi-ai-agent-m4g6.onrender.com/docs](https://multi-ai-agent-m4g6.onrender.com/docs)  
-📊 **Prometheus Metrics Exporter**: [https://multi-ai-agent-m4g6.onrender.com/metrics](https://multi-ai-agent-m4g6.onrender.com/metrics)
+📊 **Prometheus Metrics Exporter**: [https://multi-ai-agent-m4g6.onrender.com/metrics](https://multi-ai-agent-m4g6.onrender.com/metrics)  
+🏛️ **Architecture & Design Patterns Guide**: [docs/DESIGN_PATTERNS.md](docs/DESIGN_PATTERNS.md)
+
+---
+
+## 🏛️ 10 Enterprise Design Patterns & Architectural Concepts
+
+The codebase integrates 10 core software design patterns and architectural concepts to ensure production modularity, testability, and resilience:
+
+| # | Design Pattern / Concept | Target Components & Implementation | Key Role & Problem Solved |
+|---|---|---|---|
+| **1** | **Repository Pattern** | [`tripmate/repositories/interfaces.py`](tripmate/repositories/interfaces.py)<br>[`tripmate/repositories/store_repositories.py`](tripmate/repositories/store_repositories.py) | Decouples business logic from persistence. Provides contracts (`IUserRepository`, `IWatchlistRepository`, `IAlertRepository`, `IAssetRepository`, `IThreadOwnerRepository`, `IBookingRepository`) and concrete implementations with isolated mock testing. |
+| **2** | **Factory Pattern** | [`tripmate/factories/agent_factory.py`](tripmate/factories/agent_factory.py)<br>[`tripmate/factories/llm_factory.py`](tripmate/factories/llm_factory.py) | Centralizes dynamic agent discovery (`AgentFactory`) and provider client creation (`LLMClientFactory`). Validates configuration requirements and fails fast on unsupported options. |
+| **3** | **Singleton Pattern** | [`tripmate/core/singleton.py`](tripmate/core/singleton.py) | Thread-safe `SingletonMeta` with double-checked locking for expensive shared resources (`DataStore`, `ModelRouter`, `AgentRegistry`, `CircuitBreakerRegistry`, `CommandBus`, `QueryBus`). Documents process-local boundaries. |
+| **4** | **Strategy Pattern** | [`tripmate/strategies/llm_strategies.py`](tripmate/strategies/llm_strategies.py)<br>[`tripmate/strategies/booking_strategies.py`](tripmate/strategies/booking_strategies.py) | Makes interchangeable algorithms selectable without conditional branching: dynamic LLM provider failover (Groq ➔ OpenRouter ➔ Hugging Face) and pluggable GDS flight/hotel search algorithms. |
+| **5** | **Observer Pattern** | [`tripmate/events/events.py`](tripmate/events/events.py)<br>[`tripmate/events/dispatcher.py`](tripmate/events/dispatcher.py)<br>[`tripmate/events/subscribers.py`](tripmate/events/subscribers.py) | Asynchronous in-process pub/sub event dispatcher. Emits strongly-typed workflow milestones to independent subscribers (Audit Logger, Prometheus Metrics, SSE Streaming Bridge) with complete exception isolation. |
+| **6** | **Builder Pattern** | [`tripmate/builders/workflow_state_builder.py`](tripmate/builders/workflow_state_builder.py)<br>[`tripmate/builders/response_builder.py`](tripmate/builders/response_builder.py) | Step-by-step assembly and validation of complex multi-attribute objects: `TravelWorkflowStateBuilder` for LangGraph `TravelState` and `TravelPlanResponseBuilder` for API serialization with token/cost accounting. |
+| **7** | **Adapter Pattern** | [`tripmate/adapters/weather_adapter.py`](tripmate/adapters/weather_adapter.py)<br>[`tripmate/adapters/flight_adapter.py`](tripmate/adapters/flight_adapter.py)<br>[`tripmate/adapters/tavily_adapter.py`](tripmate/adapters/tavily_adapter.py) | Normalizes heterogeneous MCP responses and external API formats into strongly-typed domain schemas and audited `EvidenceItem` models. |
+| **8** | **Decorator Pattern** | [`tripmate/core/decorators.py`](tripmate/core/decorators.py) | Reusable cross-cutting decorators (`@timed_async`, `@retry_async`, `@circuit_protected`) providing latency telemetry, exponential backoff for transient errors, and circuit guarding while preserving signatures via `functools.wraps`. |
+| **9** | **CQRS** | [`tripmate/cqrs/commands.py`](tripmate/cqrs/commands.py)<br>[`tripmate/cqrs/queries.py`](tripmate/cqrs/queries.py)<br>[`tripmate/cqrs/handlers.py`](tripmate/cqrs/handlers.py)<br>[`tripmate/cqrs/bus.py`](tripmate/cqrs/bus.py) | Separates state-mutating commands from read-only queries at the service layer. Handlers guarantee zero query-side mutation while keeping existing API endpoints and response contracts identical. |
+| **10** | **Circuit Breaker** | [`tripmate/integrations/circuit_breaker.py`](tripmate/integrations/circuit_breaker.py) | 3-state state machine (`CLOSED`, `OPEN`, `HALF_OPEN`) protecting third-party APIs. Discriminates transient network errors from permanent client/validation errors, guards half-open trial concurrency, and supports centralized registry tracking. |
 
 ---
 
