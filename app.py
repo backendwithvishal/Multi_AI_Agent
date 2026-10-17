@@ -62,7 +62,22 @@ async def lifespan(app: FastAPI):
             raise
         else:
             logger.warning(f"[STARTUP WARNING] {exc}")
-    
+
+    # Initialize and apply database migrations if PostgreSQL is configured
+    from tripmate.database import get_formatted_db_url, close_db_pools
+    if get_formatted_db_url():
+        try:
+            from tripmate.database.migrator import run_migrations_up
+            from tripmate.database.store import store
+            mig_res = run_migrations_up("head")
+            if mig_res.get("success"):
+                logger.info("PostgreSQL database migrations verified and up to date.")
+            else:
+                logger.warning(f"Database migration notice on startup: {mig_res.get('error')}")
+            store._seed_initial_data()
+        except Exception as exc:
+            logger.warning(f"Notice during database initialization on startup: {exc}")
+
     # Start background task queue worker
     await task_queue.start()
     yield
@@ -70,6 +85,7 @@ async def lifespan(app: FastAPI):
     try:
         await task_queue.stop()
         await hybrid_cache.aclose()
+        close_db_pools()
     except Exception as exc:
         logger.warning(f"[SHUTDOWN WARNING] Clean shutdown: {exc}")
 
