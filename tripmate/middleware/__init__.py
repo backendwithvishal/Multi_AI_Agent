@@ -88,7 +88,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
         # Cache-Control defense for API and diagnostic endpoints
-        if request.url.path.startswith("/api/") or request.url.path in ("/health", "/metrics"):
+        content_type = response.headers.get("content-type", "")
+        if "text/event-stream" in content_type:
+            response.headers["Cache-Control"] = "no-cache, no-transform"
+            response.headers["X-Accel-Buffering"] = "no"
+        elif request.url.path.startswith("/api/") or request.url.path in ("/health", "/metrics"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"

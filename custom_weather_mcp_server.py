@@ -42,24 +42,27 @@ ALLOWED_WEATHER_HOSTS = ["api.openweathermap.org"]
 MAX_WEATHER_RESPONSE_BYTES = 50_000
 
 
-async def _request_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
+def _request_json(url: str, params: dict[str, Any]):
     """Sends async non-blocking HTTP GET request to OpenWeather API with SSRF protection."""
     parsed = urlparse(url)
     if parsed.hostname not in ALLOWED_WEATHER_HOSTS:
         raise ValueError(f"SSRF Protection: Host '{parsed.hostname}' is not in allowed weather hosts.")
 
-    try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-            if len(response.content) > MAX_WEATHER_RESPONSE_BYTES:
-                raise ValueError(f"Response size exceeded {MAX_WEATHER_RESPONSE_BYTES} bytes limit.")
-            return response.json()
-    except httpx.HTTPStatusError as exc:
-        details = f" Response: {exc.response.text[:500]}"
-        raise RuntimeError(f"OpenWeather request failed with status {exc.response.status_code}.{details}") from exc
-    except httpx.RequestError as exc:
-        raise RuntimeError(f"OpenWeather network request failed: {exc}") from exc
+    async def _async_get() -> dict[str, Any]:
+        try:
+            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                if len(response.content) > MAX_WEATHER_RESPONSE_BYTES:
+                    raise ValueError(f"Response size exceeded {MAX_WEATHER_RESPONSE_BYTES} bytes limit.")
+                return response.json()
+        except httpx.HTTPStatusError as exc:
+            details = f" Response: {exc.response.text[:500]}"
+            raise RuntimeError(f"OpenWeather request failed with status {exc.response.status_code}.{details}") from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError(f"OpenWeather network request failed: {exc}") from exc
+
+    return _async_get()
 
 
 @mcp.tool()

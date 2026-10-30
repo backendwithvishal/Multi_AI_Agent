@@ -107,7 +107,9 @@ class BoundedAsyncTTLCache:
             future.set_result(val)
             return val
         except Exception as exc:
-            future.set_exception(exc)
+            if not future.done():
+                future.set_exception(exc)
+                future.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
             raise exc
         finally:
             async with self._lock:

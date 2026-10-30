@@ -89,6 +89,8 @@ async def test_provider_timeout_fallback():
     # Trip breaker manually to simulate provider down
     breaker.state = breaker.state.OPEN
     breaker.failure_count = 5
+    breaker.last_failure_time = time.time()
+    breaker.last_state_change = time.time()
 
     res = await safe_tavily_search("Luxury hotels in Kyoto", user_id="user_test_timeout")
     assert "temporarily unavailable" in res or "standard destination advice" in res
@@ -158,7 +160,8 @@ async def test_approval_idempotency(auth_headers):
         result2 = approve_resp2.json()
         # Must return the identical final response without throwing INVALID_WORKFLOW_STATE
         assert result2["success"] is True
-        assert result2["final_response"] == result1["final_response"]
+        assert result2["answer"] == result1["answer"]
+        assert result2["itinerary"] == result1["itinerary"]
 
 
 @pytest.mark.asyncio
