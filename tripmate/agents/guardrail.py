@@ -250,3 +250,55 @@ def sanitize_output(output_text: str) -> str:
         sanitized = pattern.sub(replacement, sanitized)
     return sanitized
 
+
+# =========================================================
+# Stage 4: Delimiter Isolation & Injection Defense Engine
+# =========================================================
+
+UNTRUSTED_USER_DELIMITER_START = "<untrusted_user_query>"
+UNTRUSTED_USER_DELIMITER_END = "</untrusted_user_query>"
+UNTRUSTED_TOOL_DELIMITER_START = "<untrusted_tool_data>"
+UNTRUSTED_TOOL_DELIMITER_END = "</untrusted_tool_data>"
+
+ALL_DELIMITER_TAGS = [
+    "<untrusted_user_query>",
+    "</untrusted_user_query>",
+    "<untrusted_tool_data>",
+    "</untrusted_tool_data>",
+    "<system>",
+    "</system>",
+    "<|im_start|>",
+    "<|im_end|>",
+    "[INST]",
+    "[/INST]",
+]
+
+
+def strip_delimiter_tags(text: str) -> str:
+    """Strips delimiter tags from untrusted content to prevent delimiter escaping or hijacking."""
+    if not isinstance(text, str):
+        return text
+    cleaned = text
+    for tag in ALL_DELIMITER_TAGS:
+        pattern = re.compile(re.escape(tag), re.IGNORECASE)
+        cleaned = pattern.sub("", cleaned)
+    return cleaned
+
+
+def wrap_untrusted_user_input(text: str) -> str:
+    """Sanitizes and wraps user input inside untrusted delimiters."""
+    cleaned = strip_delimiter_tags(text).strip()
+    return f"{UNTRUSTED_USER_DELIMITER_START}\n{cleaned}\n{UNTRUSTED_USER_DELIMITER_END}"
+
+
+def wrap_untrusted_tool_data(text: str, max_bytes: int = 50000) -> str:
+    """Sanitizes, truncates to max_bytes, and wraps tool/search output inside untrusted delimiters."""
+    if not isinstance(text, str):
+        text = str(text)
+    # Cap tool output size
+    if len(text.encode("utf-8")) > max_bytes:
+        text = text[:max_bytes] + "\n...[truncated output]"
+    cleaned = strip_delimiter_tags(text)
+    return f"{UNTRUSTED_TOOL_DELIMITER_START}\n{cleaned}\n{UNTRUSTED_TOOL_DELIMITER_END}"
+
+

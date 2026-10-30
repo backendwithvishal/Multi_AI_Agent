@@ -1,22 +1,29 @@
 """
 Typed Settings & Environment Configuration Module
 
-This module loads variables from `.env` and provides typed settings used across the app:
-- Application Metadata (APP_NAME, APP_VERSION, APP_ENV)
-- API Keys (Groq, Tavily, OpenWeather, AviationStack)
-- Database URL & persistent checkpointing settings
-- Performance tuning (Cache TTL, Max entries, Rate limit thresholds)
-- Timeout limits for LLM and external MCP tools
+Built on pydantic-settings with strict validation:
+- Application Metadata (APP_NAME, APP_VERSION, APP_ENV, ENV)
+- Security & Auth (API_KEY, ADMIN_REGISTRATION_SECRET, AUTH_REQUIRED, ALLOWED_ORIGINS)
+- API Keys (Groq, OpenRouter, HuggingFace, Tavily, OpenWeather, AviationStack)
+- Persistence & Caching (DATABASE_URL, REDIS_URL)
+- Cost & Rate Control (RATE_LIMIT_REQUESTS, DAILY_TOKEN_BUDGET_PER_USER, RECURSION_LIMIT)
+- Proxy & Network Boundaries (TRUSTED_PROXIES, TOOL_ALLOWED_HOSTS, MAX_REQUEST_BODY_BYTES)
 """
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 from dotenv import load_dotenv
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+
+# =========================================================
+# Legacy Parsing Helper Functions (Preserved for compatibility)
+# =========================================================
 
 def _parse_str(name: str, default: str = "") -> str:
     """Reads a string environment variable with whitespace stripping and fallback."""
@@ -42,31 +49,17 @@ def _parse_int(name: str, default: int) -> int:
 
 
 def _parse_float(name: str, default: float) -> float:
-    """Safely converts environment variable to float with clear error reporting.
-
-    Also detects concatenated numeric strings (e.g. '10.010.0') which occur
-    when the same variable is accidentally written twice in a .env file or when
-    docker-compose env_file and environment: blocks both supply the same key and
-    the values get merged instead of overridden.
-    """
+    """Safely converts environment variable to float with concatenation detection."""
     raw = os.getenv(name)
     if raw is None or not raw.strip():
         return default
     cleaned = raw.strip()
 
-    # --- Detect concatenated-value corruption (e.g. "10.010.0", "30.030.0") ---
-    # A valid float has at most one leading sign, one decimal point, and no
-    # embedded whitespace. If the string contains more than one decimal point
-    # *and* is still not parseable (NaN/Inf aside), it almost certainly means
-    # two values were concatenated. Emit a targeted hint so the cause is obvious.
     if cleaned.count(".") > 1:
         raise ValueError(
             f"Invalid configuration for '{name}': value '{raw}' looks like two numbers "
             f"concatenated together (e.g. '10.0' + '10.0' → '10.010.0'). "
-            f"Check for duplicate definitions of {name} in: "
-            f"(1) your .env file (duplicate key on two lines), "
-            f"(2) both env_file: and environment: blocks in docker-compose.yml, "
-            f"or (3) a shell script that appends instead of assigns the variable."
+            f"Check for duplicate definitions of {name}."
         )
 
     try:
@@ -102,74 +95,193 @@ def _parse_list(name: str, default: List[str]) -> List[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-class Settings:
-    """Central configuration class loading environment settings with safe defaults and explicit validation."""
+# =========================================================
+# Pydantic Typed Settings Class
+# =========================================================
 
-    def __init__(self):
-        self.APP_NAME: str = "TripMate AI Multi-Agent Backend Engine"
-        self.APP_VERSION: str = "3.0.0"
-        self.APP_ENV: str = _parse_str("APP_ENV", "development").lower()
+class Settings(BaseSettings):
+    """Central configuration class loading environment settings with pydantic validation."""
 
-        # Security & Authentication settings
-        self.API_KEY: Optional[str] = _parse_str("API_KEY") or None
-        self.ADMIN_REGISTRATION_SECRET: Optional[str] = _parse_str("ADMIN_REGISTRATION_SECRET") or None
-        self.AUTH_REQUIRED: bool = (
-            _parse_bool("AUTH_REQUIRED", False)
-            or self.APP_ENV == "production"
-        )
-        self.ALLOWED_ORIGINS: List[str] = _parse_list("ALLOWED_ORIGINS", ["*"])
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-        # External API Keys for AI & MCP services
-        self.GROQ_API_KEY: str = _parse_str("GROQ_API_KEY")
-        self.OPENROUTER_API_KEY: str = _parse_str("OPENROUTER_API_KEY")
-        self.HUGGINGFACE_API_KEY: str = (
-            _parse_str("HUGGINGFACE_API_KEY")
-            or _parse_str("HUGGING_FACE_API_KEY")
-        )
-        self.TAVILY_API_KEY: str = _parse_str("TAVILY_API_KEY")
-        self.OPENWEATHER_API_KEY: str = _parse_str("OPENWEATHER_API_KEY")
-        self.AVIATIONSTACK_API_KEY: str = (
-            _parse_str("AVIATIONSTACK_API_KEY")
-            or _parse_str("AVIATION_STACK_API_KEY")
-        )
+    APP_NAME: str = "TripMate AI Multi-Agent Backend Engine"
+    APP_VERSION: str = "3.0.0"
+    APP_ENV: str = Field(default="development")
+    ENV: str = Field(default="")
 
-        # LangSmith Observability & Tracing settings
-        self.LANGCHAIN_TRACING_V2: str = _parse_str("LANGCHAIN_TRACING_V2", "false")
-        self.LANGCHAIN_API_KEY: str = _parse_str("LANGCHAIN_API_KEY")
-        self.LANGCHAIN_PROJECT: str = _parse_str("LANGCHAIN_PROJECT", "tripmate-ai")
-        self.LANGCHAIN_ENDPOINT: str = _parse_str("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+    # Security & Authentication settings
+    API_KEY: Optional[str] = None
+    ADMIN_REGISTRATION_SECRET: Optional[str] = None
+    AUTH_REQUIRED: bool = False
+    ALLOWED_ORIGINS: Union[List[str], str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"])
 
-        if self.LANGCHAIN_API_KEY and _parse_bool("LANGCHAIN_TRACING_V2", False):
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            os.environ["LANGCHAIN_API_KEY"] = self.LANGCHAIN_API_KEY
-            os.environ["LANGCHAIN_PROJECT"] = self.LANGCHAIN_PROJECT
-            os.environ["LANGCHAIN_ENDPOINT"] = self.LANGCHAIN_ENDPOINT
+    # External API Keys for AI & MCP services
+    GROQ_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
+    HUGGINGFACE_API_KEY: str = ""
+    TAVILY_API_KEY: str = ""
+    OPENWEATHER_API_KEY: str = ""
+    AVIATIONSTACK_API_KEY: str = ""
+
+    # LangSmith Observability & Tracing settings
+    LANGCHAIN_TRACING_V2: str = "false"
+    LANGCHAIN_API_KEY: str = ""
+    LANGCHAIN_PROJECT: str = "tripmate-ai"
+    LANGCHAIN_ENDPOINT: str = "https://api.smith.langchain.com"
+
+    # Datastore URLs
+    DATABASE_URL: Optional[str] = None
+    REDIS_URL: Optional[str] = None
+
+    # Performance & Rate Limits
+    CACHE_TTL_SECONDS: int = 3600
+    CACHE_MAX_ENTRIES: int = 1000
+    RATE_LIMIT_REQUESTS: int = 30
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # Cost & Abuse Controls
+    DAILY_TOKEN_BUDGET_PER_USER: int = 100_000
+    LANGGRAPH_RECURSION_LIMIT: int = 15
+    MAX_PARALLEL_AGENTS: int = 4
+    FAIL_OPEN_REDIS: bool = False  # Fail-closed for LLM routes by default
+    EMERGENCY_IN_MEMORY_RATE_LIMIT: int = 5  # Small emergency cap if Redis is down
+
+    # Proxy Awareness & Ingress Boundaries
+    TRUSTED_PROXIES: Union[List[str], str] = Field(default_factory=lambda: ["127.0.0.1", "::1"])
+    MAX_REQUEST_BODY_BYTES: int = 1_048_576  # 1 MB
+    MAX_MESSAGE_LENGTH: int = 2000
+    MAX_FEEDBACK_LENGTH: int = 1000
+    THREAD_ID_REGEX: str = r"^[a-zA-Z0-9_-]{8,128}$"
+    ENABLE_DOCS_IN_PROD: bool = False
+
+    # SSRF & Outbound Boundaries
+    TOOL_ALLOWED_HOSTS: Union[List[str], str] = Field(
+        default_factory=lambda: [
+            "api.openweathermap.org",
+            "mcp.tavily.com",
+            "api.aviationstack.com",
+            "api.groq.com",
+            "openrouter.ai",
+        ]
+    )
+    MAX_TOOL_OUTPUT_BYTES: int = 50_000
+
+    # External Service Timeouts (Seconds)
+    LLM_TIMEOUT_SECONDS: float = 30.0
+    MCP_TIMEOUT_SECONDS: float = 15.0
+    EXTERNAL_API_TIMEOUT_SECONDS: float = 10.0
+
+    # Database Pool Settings
+    DB_POOL_MIN_SIZE: int = 1
+    DB_POOL_MAX_SIZE: int = 10
+    DB_POOL_TIMEOUT_SECONDS: float = 10.0
+
+    # Human-In-The-Loop Approval Settings
+    APPROVAL_TTL_SECONDS: int = 900  # 15 minutes TTL for pending approvals
+
+    # MCP Cache Settings
+    MCP_CACHE_TTL_SECONDS: int = 3600
+    MCP_CACHE_MAX_BYTES: int = 65_536  # 64 KB per-key limit
+
+    # Logging level
+    LOG_LEVEL: str = "INFO"
+
+    @field_validator("ALLOWED_ORIGINS", "TRUSTED_PROXIES", "TOOL_ALLOWED_HOSTS", mode="before")
+    @classmethod
+    def _parse_list_fields(cls, v):
+        if isinstance(v, str):
+            cleaned = v.strip()
+            if cleaned.startswith("[") and cleaned.endswith("]"):
+                import json
+                try:
+                    return json.loads(cleaned)
+                except Exception:
+                    pass
+            return [x.strip() for x in cleaned.split(",") if x.strip()]
+        return v
+
+    def __init__(self, **values):
+        super().__init__(**values)
+
+        # Synchronize ENV and APP_ENV
+        env_from_os = (os.getenv("ENV") or os.getenv("APP_ENV") or self.ENV or self.APP_ENV).strip().lower()
+        if env_from_os in ("prod", "production"):
+            self.APP_ENV = "production"
+            self.ENV = "prod"
+        elif env_from_os in ("dev", "development"):
+            self.APP_ENV = "development"
+            self.ENV = "dev"
+        elif env_from_os in ("test", "testing"):
+            self.APP_ENV = "test"
+            self.ENV = "test"
         else:
-            # Explicitly disable to prevent unauthorized background telemetry calls
-            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            self.APP_ENV = env_from_os
+            self.ENV = env_from_os
 
-        # PostgreSQL Database Connection String
-        self.DATABASE_URL: Optional[str] = _parse_str("DATABASE_URL") or None
+        # Fallback aliases from environment if not populated
+        if not self.API_KEY:
+            self.API_KEY = _parse_str("API_KEY") or None
+        if not self.ADMIN_REGISTRATION_SECRET:
+            self.ADMIN_REGISTRATION_SECRET = _parse_str("ADMIN_REGISTRATION_SECRET") or None
 
-        # Performance & Rate Limits
-        self.CACHE_TTL_SECONDS: int = _parse_int("CACHE_TTL_SECONDS", 3600)
-        self.CACHE_MAX_ENTRIES: int = _parse_int("CACHE_MAX_ENTRIES", 1000)
-        self.RATE_LIMIT_REQUESTS: int = _parse_int("RATE_LIMIT_REQUESTS", 500)
-        self.RATE_LIMIT_WINDOW_SECONDS: int = _parse_int("RATE_LIMIT_WINDOW_SECONDS", 60)
+        # Parse boolean AUTH_REQUIRED
+        raw_auth = os.getenv("AUTH_REQUIRED")
+        if raw_auth is not None:
+            self.AUTH_REQUIRED = _parse_bool("AUTH_REQUIRED", False)
+        elif self.is_production:
+            self.AUTH_REQUIRED = True
 
-        # External Service Timeouts (Seconds)
-        self.LLM_TIMEOUT_SECONDS: float = _parse_float("LLM_TIMEOUT_SECONDS", 30.0)
-        self.MCP_TIMEOUT_SECONDS: float = _parse_float("MCP_TIMEOUT_SECONDS", 15.0)
-        self.EXTERNAL_API_TIMEOUT_SECONDS: float = _parse_float(
-            "EXTERNAL_API_TIMEOUT_SECONDS", 10.0
-        )
+        # Parse ALLOWED_ORIGINS if set in os.environ
+        raw_origins = os.getenv("ALLOWED_ORIGINS")
+        if raw_origins:
+            self.ALLOWED_ORIGINS = _parse_list("ALLOWED_ORIGINS", self.ALLOWED_ORIGINS)
 
-        # Logging level
-        self.LOG_LEVEL: str = _parse_str("LOG_LEVEL", "INFO").upper()
+        # External Keys
+        if not self.GROQ_API_KEY:
+            self.GROQ_API_KEY = _parse_str("GROQ_API_KEY")
+        if not self.OPENROUTER_API_KEY:
+            self.OPENROUTER_API_KEY = _parse_str("OPENROUTER_API_KEY")
+        if not self.HUGGINGFACE_API_KEY:
+            self.HUGGINGFACE_API_KEY = _parse_str("HUGGINGFACE_API_KEY") or _parse_str("HUGGING_FACE_API_KEY")
+        if not self.TAVILY_API_KEY:
+            self.TAVILY_API_KEY = _parse_str("TAVILY_API_KEY")
+        if not self.OPENWEATHER_API_KEY:
+            self.OPENWEATHER_API_KEY = _parse_str("OPENWEATHER_API_KEY")
+        if not self.AVIATIONSTACK_API_KEY:
+            self.AVIATIONSTACK_API_KEY = _parse_str("AVIATIONSTACK_API_KEY") or _parse_str("AVIATION_STACK_API_KEY")
+
+        # Datastores
+        if not self.DATABASE_URL:
+            self.DATABASE_URL = _parse_str("DATABASE_URL") or None
+        if not self.REDIS_URL:
+            self.REDIS_URL = _parse_str("REDIS_URL") or None
+
+        # Parsed limits
+        if "RATE_LIMIT_REQUESTS" in os.environ:
+            self.RATE_LIMIT_REQUESTS = _parse_int("RATE_LIMIT_REQUESTS", self.RATE_LIMIT_REQUESTS)
+        if "RATE_LIMIT_WINDOW_SECONDS" in os.environ:
+            self.RATE_LIMIT_WINDOW_SECONDS = _parse_int("RATE_LIMIT_WINDOW_SECONDS", self.RATE_LIMIT_WINDOW_SECONDS)
+        if "EXTERNAL_API_TIMEOUT_SECONDS" in os.environ:
+            self.EXTERNAL_API_TIMEOUT_SECONDS = _parse_float("EXTERNAL_API_TIMEOUT_SECONDS", self.EXTERNAL_API_TIMEOUT_SECONDS)
+        if "LLM_TIMEOUT_SECONDS" in os.environ:
+            self.LLM_TIMEOUT_SECONDS = _parse_float("LLM_TIMEOUT_SECONDS", self.LLM_TIMEOUT_SECONDS)
+        if "MCP_TIMEOUT_SECONDS" in os.environ:
+            self.MCP_TIMEOUT_SECONDS = _parse_float("MCP_TIMEOUT_SECONDS", self.MCP_TIMEOUT_SECONDS)
+        if "TRUSTED_PROXIES" in os.environ:
+            self.TRUSTED_PROXIES = _parse_list("TRUSTED_PROXIES", self.TRUSTED_PROXIES)
+
+    @property
+    def is_production(self) -> bool:
+        """Returns True if running in production mode."""
+        return self.APP_ENV in ("production", "prod") or self.ENV in ("production", "prod")
 
     def validate_production(self) -> None:
         """Validates that mandatory API keys and security configs are present when running in production mode."""
-        if self.APP_ENV == "production":
+        if self.is_production:
             missing = []
             has_llm = bool(self.GROQ_API_KEY or self.OPENROUTER_API_KEY or self.HUGGINGFACE_API_KEY)
             if not has_llm:
@@ -181,7 +293,11 @@ class Settings:
                     f"Production startup failed! Mandatory configuration missing: {', '.join(missing)}"
                 )
 
+            if "*" in self.ALLOWED_ORIGINS and self.AUTH_REQUIRED and getattr(self, "CORS_ALLOW_CREDENTIALS", False):
+                raise ValueError(
+                    "Production startup failed! Wildcard origin '*' cannot be combined with credentials."
+                )
+
 
 # Global singleton settings object
 settings = Settings()
-

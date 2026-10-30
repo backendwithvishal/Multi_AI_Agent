@@ -22,11 +22,13 @@ async def create_travel_plan(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
-    effective_user_id = request_data.user_id or current_user.get("id")
+    effective_user_id = current_user.get("id")
+    server_thread_id = request_data.thread_id or f"thread_{uuid.uuid4().hex}"
+
     try:
         result = await travel_service.execute_travel_plan(
             user_input=request_data.message,
-            thread_id=request_data.thread_id,
+            thread_id=server_thread_id,
             user_id=effective_user_id,
         )
         return APIResponse(
@@ -37,8 +39,7 @@ async def create_travel_plan(
         )
     except HTTPException:
         raise
-    except Exception as exc:
-        err_msg = str(exc).strip() or "An unexpected error occurred during travel plan execution."
+    except Exception:
         return JSONResponse(
             status_code=500,
             content=APIResponse(
@@ -46,7 +47,7 @@ async def create_travel_plan(
                 data=None,
                 error=ErrorDetail(
                     code="TRAVEL_WORKFLOW_ERROR",
-                    message=err_msg,
+                    message="An unexpected error occurred during travel plan execution.",
                 ),
                 request_id=request_id,
             ).model_dump(),
@@ -64,13 +65,22 @@ async def stream_travel_plan(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
-    thread_id = request_data.thread_id or f"user_{uuid.uuid4().hex}"
-    effective_user_id = request_data.user_id or current_user.get("id")
+    effective_user_id = current_user.get("id")
+    server_thread_id = request_data.thread_id or f"thread_{uuid.uuid4().hex}"
 
     generator = travel_service.stream_travel_events(
         user_input=request_data.message,
-        thread_id=thread_id,
+        thread_id=server_thread_id,
         request_id=request_id,
         user_id=effective_user_id,
+        request=request,
     )
-    return StreamingResponse(generator, media_type="text/event-stream")
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

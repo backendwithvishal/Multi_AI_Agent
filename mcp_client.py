@@ -7,16 +7,21 @@ This module manages connections to all Model Context Protocol (MCP) servers:
 3. Custom Weather FastMCP Server (stdio transport for OpenWeather current & forecast metrics).
 """
 
+import asyncio
+import logging
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import certifi
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_mcp_adapters.client import MultiServerMCPClient
+
+logger = logging.getLogger("tripmate.mcp_client")
 
 
 # =========================================================
@@ -104,48 +109,96 @@ def create_mcp_client() -> MultiServerMCPClient:
     )
 
 
-client = create_mcp_client()
+class MCPManager:
+    """Manages persistent MCP server connections and lifecycle without re-spawning per request."""
+
+    def __init__(self):
+        self._client: Optional[MultiServerMCPClient] = None
+        self._tools: Dict[Tuple[str, str], Any] = {}
+        self._lock = asyncio.Lock()
+        self._failures: Dict[str, int] = {}
+        self._last_failure_time: Dict[str, float] = {}
+
+    def get_client(self) -> MultiServerMCPClient:
+        if self._client is None:
+            self._client = create_mcp_client()
+        return self._client
+
+    async def get_tool(self, server_name: str, tool_name: str):
+        key = (server_name, tool_name)
+        if key in self._tools:
+            return self._tools[key]
+
+        async with self._lock:
+            if key in self._tools:
+                return self._tools[key]
+
+            now = time.time()
+            fail_count = self._failures.get(server_name, 0)
+            if fail_count > 0:
+                last_fail = self._last_failure_time.get(server_name, 0)
+                backoff_wait = min(15.0, 0.5 * (2 ** (fail_count - 1)))
+                if now - last_fail < backoff_wait:
+                    raise RuntimeError(
+                        f"MCP server '{server_name}' temporarily in backoff cooldown ({backoff_wait:.1f}s) after failure."
+                    )
+
+            load_dotenv(BASE_DIR / ".env", override=False)
+            if server_name == "tavily":
+                _require_env("TAVILY_API_KEY", os.getenv("TAVILY_API_KEY"))
+            elif server_name == "aviationstack":
+                _require_env(
+                    "AVIATION_STACK_API_KEY",
+                    os.getenv("AVIATION_STACK_API_KEY") or os.getenv("AVIATIONSTACK_API_KEY"),
+                )
+            elif server_name == "weather":
+                _require_env("OPENWEATHER_API_KEY", os.getenv("OPENWEATHER_API_KEY"))
+
+            client = self.get_client()
+            try:
+                tools = await client.get_tools(server_name=server_name)
+                for t in tools:
+                    self._tools[(server_name, t.name)] = t
+                self._failures[server_name] = 0
+            except Exception as exc:
+                self._failures[server_name] = fail_count + 1
+                self._last_failure_time[server_name] = now
+                logger.warning(
+                    f"[MCPManager] Failed to load tools from '{server_name}': {exc}. Failure count: {self._failures[server_name]}"
+                )
+                self._client = None
+                raise
+
+            tool = self._tools.get(key)
+            if tool is None:
+                available = ", ".join(sorted(t.name for (s, _), t in self._tools.items() if s == server_name)) or "none"
+                raise RuntimeError(
+                    f"MCP tool '{tool_name}' was not found on server '{server_name}'. Available: {available}"
+                )
+            return tool
+
+    async def startup(self):
+        """Initializes client and pre-warms connections."""
+        async with self._lock:
+            if self._client is None:
+                self._client = create_mcp_client()
+            logger.info("[MCPManager] MCP Client Manager started.")
+
+    async def shutdown(self):
+        """Cleanly releases MCP subprocesses and clears tool references."""
+        async with self._lock:
+            self._tools.clear()
+            self._client = None
+            logger.info("[MCPManager] MCP Client Manager stopped cleanly.")
+
+
+mcp_manager = MCPManager()
+client = mcp_manager.get_client()
 
 
 async def _get_server_tool(server_name: str, tool_name: str):
-    """
-    Load one tool from one MCP server dynamically.
-    This prevents a broken weather or AviationStack server from crashing an unrelated Tavily request.
-    """
-    load_dotenv(BASE_DIR / ".env", override=True)
-
-    if server_name == "tavily":
-        _require_env("TAVILY_API_KEY", os.getenv("TAVILY_API_KEY"))
-
-    elif server_name == "aviationstack":
-        _require_env(
-            "AVIATION_STACK_API_KEY",
-            os.getenv("AVIATION_STACK_API_KEY") or os.getenv("AVIATIONSTACK_API_KEY"),
-        )
-        if shutil.which("uvx") is None and shutil.which("uv") is None and not Path(UVX_COMMAND).is_file():
-            raise RuntimeError(
-                "uvx was not found. Install uv, reopen the terminal, "
-                "activate the travel environment, and run `uvx --version`."
-            )
-
-    elif server_name == "weather":
-        _require_env("OPENWEATHER_API_KEY", os.getenv("OPENWEATHER_API_KEY"))
-        if not WEATHER_SERVER_PATH.is_file():
-            raise FileNotFoundError(f"Weather MCP server not found: {WEATHER_SERVER_PATH}")
-
-    # Recreate client if keys were updated
-    active_client = create_mcp_client()
-    tools = await active_client.get_tools(server_name=server_name)
-
-    tool = next((item for item in tools if item.name == tool_name), None)
-    if tool is None:
-        available_tools = ", ".join(sorted(item.name for item in tools)) or "none"
-        raise RuntimeError(
-            f"MCP tool '{tool_name}' was not found on server '{server_name}'. "
-            f"Available tools: {available_tools}"
-        )
-
-    return tool
+    """Load tool from managed persistent MCP client without spawning per request."""
+    return await mcp_manager.get_tool(server_name, tool_name)
 
 
 # =========================================================

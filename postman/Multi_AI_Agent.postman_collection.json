@@ -1581,9 +1581,9 @@
 		{ "key": "bookingId", "value": "bk_sample_123" },
 		{ "key": "resetToken", "value": "reset_token_sample" },
 		{ "key": "groqApiKey", "value": "" },
-		{ "key": "openrouterApiKey", "value": "sk-or-v1-" },
+		{ "key": "openrouterApiKey", "value": "" },
 		{ "key": "huggingfaceApiKey", "value": "" },
-		{ "key": "tavilyApiKey", "value": "tvly-dev-kFj2z-" },
+		{ "key": "tavilyApiKey", "value": "" },
 		{ "key": "openweatherApiKey", "value": "" },
 		{ "key": "aviationstackApiKey", "value": "" },
 		{ "key": "langchainApiKey", "value": "" }

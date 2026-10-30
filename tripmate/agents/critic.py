@@ -10,10 +10,13 @@ Checks:
 """
 
 import json
+import logging
 from typing import Any, Dict
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from tripmate.schemas.agents import CriticReport
+
+logger = logging.getLogger("tripmate.critic")
 
 
 class CriticAgent:
@@ -86,7 +89,7 @@ Return strict JSON matching this schema:
                 data = json.loads(cleaned[start:end+1])
                 return CriticReport(**data)
         except Exception as exc:
-            print(f"Critic evaluation fallback: {exc}")
+            logger.warning(f"Critic evaluation fallback: {exc}")
 
         return CriticReport(
             is_valid=True,

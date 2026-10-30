@@ -93,23 +93,24 @@ async def parallel_specialists_node(state: TravelState):
     metrics = state.get("metrics", {"agent_latencies": {}})
 
     reasoning_llm = model_router.get_model(ModelTier.REASONING)
+    agent_context = {"user_id": state.get("user_id")}
 
     tasks = []
     task_keys = []
     agent_instances = []
 
     if "flight_agent" in selected:
-        tasks.append(flight_agent_obj.run(reasoning_llm, query))
+        tasks.append(flight_agent_obj.run(reasoning_llm, query, context=agent_context))
         task_keys.append("flight_results")
         agent_instances.append("flight_agent")
 
     if "hotel_agent" in selected:
-        tasks.append(hotel_agent_obj.run(reasoning_llm, query))
+        tasks.append(hotel_agent_obj.run(reasoning_llm, query, context=agent_context))
         task_keys.append("hotel_results")
         agent_instances.append("hotel_agent")
 
     if "weather_agent" in selected:
-        tasks.append(weather_agent_obj.run(reasoning_llm, query))
+        tasks.append(weather_agent_obj.run(reasoning_llm, query, context=agent_context))
         task_keys.append("weather_results")
         agent_instances.append("weather_agent")
 
@@ -122,6 +123,14 @@ async def parallel_specialists_node(state: TravelState):
     for key, agent_name, res in zip(task_keys, agent_instances, results):
         if isinstance(res, Exception):
             updates[key] = f"Provider unavailable: {res}"
+            structured_map[agent_name] = {
+                "agent_name": agent_name,
+                "status": "degraded",
+                "result": f"Provider unavailable: {res}",
+                "confidence": 0.3,
+                "sources": [],
+                "warnings": [str(res)],
+            }
         else:
             updates[key] = str(res.result)
             structured_map[agent_name] = res.model_dump(mode="json")

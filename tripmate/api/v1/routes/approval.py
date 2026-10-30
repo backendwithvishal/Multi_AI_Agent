@@ -22,7 +22,7 @@ async def approve_travel_plan(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
-    effective_user_id = request_data.user_id or current_user.get("id")
+    effective_user_id = current_user.get("id")
 
     if not request_data.approved and not request_data.feedback.strip():
         return JSONResponse(
@@ -55,7 +55,6 @@ async def approve_travel_plan(
     except HTTPException:
         raise
     except Exception as exc:
-        err_msg = str(exc).strip() or "An unexpected internal error occurred during workflow approval."
         return JSONResponse(
             status_code=500,
             content=APIResponse(
@@ -63,7 +62,7 @@ async def approve_travel_plan(
                 data=None,
                 error=ErrorDetail(
                     code="APPROVAL_WORKFLOW_ERROR",
-                    message=err_msg,
+                    message="An unexpected internal error occurred during workflow approval.",
                 ),
                 request_id=request_id,
             ).model_dump(),

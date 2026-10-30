@@ -10,11 +10,14 @@ Determines:
 """
 
 import json
+import logging
 from typing import Any, Dict, List
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from tripmate.schemas.agents import TaskSpec, PlanDAG
 from tripmate.agents.registry import agent_registry
+
+logger = logging.getLogger("tripmate.planner")
 
 
 class DynamicPlanner:
@@ -106,7 +109,7 @@ User Request: {user_query}
                         trip_constraints=data.get("trip_constraints", {}),
                     )
         except Exception as exc:
-            print(f"Dynamic planner fallback: {exc}")
+            logger.warning(f"Dynamic planner fallback: {exc}")
 
         return self._default_plan(user_query, "Fallback standard execution plan")
 

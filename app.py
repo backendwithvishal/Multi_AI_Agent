@@ -1,18 +1,16 @@
 import os
+import re
 import uuid
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, APIRouter, status
+from typing import Optional
+from fastapi import FastAPI, Request, APIRouter, Depends, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError, HTTPException as FastAPIHTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
-
-
-
-
+from pydantic import BaseModel, Field, field_validator
 
 from tripmate.config.settings import settings
 from tripmate.middleware import (
@@ -20,9 +18,11 @@ from tripmate.middleware import (
     SlidingWindowRateLimiter,
     SecurityHeadersMiddleware,
     StructuredLoggingMiddleware,
+    RequestBodyLimitMiddleware,
 )
 from tripmate.middleware.metrics import PrometheusMetricsMiddleware
-from tripmate.schemas import APIResponse, ErrorDetail, APIRootResponse
+from tripmate.schemas import APIResponse, ErrorDetail, APIRootResponse, strip_control_chars
+from tripmate.api.dependencies import get_current_user
 
 # Import API Domain Routers
 from tripmate.api.v1.routes.health import router as health_v1_router
@@ -78,19 +78,34 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning(f"Notice during database initialization on startup: {exc}")
 
+    # Initialize persistent MCP client manager
+    try:
+        from mcp_client import mcp_manager
+        await mcp_manager.startup()
+    except Exception as exc:
+        logger.warning(f"Notice during MCP Manager startup: {exc}")
+
     # Start background task queue worker
     await task_queue.start()
     yield
     # Graceful shutdown hooks
     try:
         await task_queue.stop()
+        from mcp_client import mcp_manager
+        await mcp_manager.shutdown()
         await hybrid_cache.aclose()
+        from tripmate.database import close_checkpointer
+        close_checkpointer()
         close_db_pools()
     except Exception as exc:
         logger.warning(f"[SHUTDOWN WARNING] Clean shutdown: {exc}")
 
 
-# Initialize FastAPI web app
+# Initialize FastAPI web app with conditional docs visibility in production
+docs_url = "/docs" if (not settings.is_production or settings.ENABLE_DOCS_IN_PROD) else None
+redoc_url = "/redoc" if (not settings.is_production or settings.ENABLE_DOCS_IN_PROD) else None
+openapi_url = "/openapi.json" if (not settings.is_production or settings.ENABLE_DOCS_IN_PROD) else None
+
 app = FastAPI(
     title=settings.APP_NAME,
     description=(
@@ -99,13 +114,15 @@ app = FastAPI(
         "Circuit Breakers, and Human-in-the-Loop approval workflows."
     ),
     version=settings.APP_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
     lifespan=lifespan,
 )
 
 # Register HTTP middleware chain in order of execution
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware, max_body_bytes=settings.MAX_REQUEST_BODY_BYTES)
 app.add_middleware(PrometheusMetricsMiddleware)
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(RequestIDMiddleware)
@@ -116,8 +133,8 @@ app.add_middleware(
     protected_prefixes=("/api/",),
 )
 
-# Configure CORS: If wildcard origin is used, allow_credentials is set to False per W3C spec
-cors_allow_credentials = False if settings.ALLOWED_ORIGINS == ["*"] else True
+# Configure CORS: Wildcard origin "*" NEVER allowed with credentials per W3C specification
+cors_allow_credentials = False if ("*" in settings.ALLOWED_ORIGINS) else True
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -257,14 +274,48 @@ app.include_router(v1_router)
 
 # Legacy request payload schemas
 class LegacyTravelRequest(BaseModel):
-    message: str
-    thread_id: str | None = None
+    model_config = {"extra": "forbid"}
+
+    message: str = Field(..., min_length=1, max_length=2000)
+    thread_id: Optional[str] = Field(default=None, max_length=128)
+
+    @field_validator("message")
+    @classmethod
+    def clean_message(cls, v: str) -> str:
+        return strip_control_chars(v)
+
+    @field_validator("thread_id")
+    @classmethod
+    def clean_thread_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        cleaned = strip_control_chars(v).strip()
+        if not cleaned:
+            return None
+        if not re.match(settings.THREAD_ID_REGEX, cleaned):
+            raise ValueError(f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'.")
+        return cleaned
 
 
 class LegacyApprovalRequest(BaseModel):
-    thread_id: str = Field(min_length=1)
+    model_config = {"extra": "forbid"}
+
+    thread_id: str = Field(..., min_length=1, max_length=128)
     approved: bool
-    feedback: str = ""
+    feedback: str = Field(default="", max_length=1000)
+
+    @field_validator("thread_id")
+    @classmethod
+    def clean_thread_id(cls, v: str) -> str:
+        cleaned = strip_control_chars(v).strip()
+        if not re.match(settings.THREAD_ID_REGEX, cleaned):
+            raise ValueError(f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'.")
+        return cleaned
+
+    @field_validator("feedback")
+    @classmethod
+    def clean_feedback(cls, v: str) -> str:
+        return strip_control_chars(v).strip()
 
 
 # Production Root Metadata & Navigation Endpoint
@@ -283,31 +334,42 @@ async def root():
         status="operational",
         environment=settings.APP_ENV,
         api_base="/api/v1",
-        docs="/docs",
+        docs="/docs" if (not settings.is_production or settings.ENABLE_DOCS_IN_PROD) else "",
         health="/api/v1/health",
         status_endpoint="/api/v1/status",
     )
 
 
-
-
-# Backward-compatibility endpoint aliases
+# Backward-compatibility endpoint aliases protected with get_current_user dependency
 @app.post("/api/travel")
-async def legacy_travel(request_data: LegacyTravelRequest, request: Request):
-    """Legacy endpoint alias for POST /api/v1/travel."""
+async def legacy_travel(
+    request_data: LegacyTravelRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Legacy endpoint alias for POST /api/v1/travel with strict authentication and thread binding."""
     user_message = request_data.message.strip()
     if not user_message:
         return JSONResponse(
             status_code=400,
             content={"success": False, "error": "Message cannot be empty."},
         )
-    result = await travel_service.execute_travel_plan(user_message, request_data.thread_id)
+    server_thread_id = request_data.thread_id or f"thread_{uuid.uuid4().hex}"
+    result = await travel_service.execute_travel_plan(
+        user_message,
+        server_thread_id,
+        user_id=current_user.get("id"),
+    )
     return JSONResponse(content={"success": True, **result})
 
 
 @app.post("/api/travel/stream")
-async def legacy_travel_stream(request_data: LegacyTravelRequest, request: Request):
-    """Legacy endpoint alias for POST /api/v1/travel/stream."""
+async def legacy_travel_stream(
+    request_data: LegacyTravelRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Legacy endpoint alias for POST /api/v1/travel/stream with strict authentication."""
     user_message = request_data.message.strip()
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
     if not user_message:
@@ -315,14 +377,32 @@ async def legacy_travel_stream(request_data: LegacyTravelRequest, request: Reque
             status_code=400,
             content={"success": False, "error": "Message cannot be empty."},
         )
-    thread_id = request_data.thread_id or f"user_{uuid.uuid4().hex}"
-    generator = travel_service.stream_travel_events(user_message, thread_id, request_id)
-    return StreamingResponse(generator, media_type="text/event-stream")
+    server_thread_id = request_data.thread_id or f"thread_{uuid.uuid4().hex}"
+    generator = travel_service.stream_travel_events(
+        user_message,
+        server_thread_id,
+        request_id,
+        user_id=current_user.get("id"),
+        request=request,
+    )
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post("/api/travel/approve")
-async def legacy_approve(request_data: LegacyApprovalRequest, request: Request):
-    """Legacy endpoint alias for POST /api/v1/travel/approve."""
+async def legacy_approve(
+    request_data: LegacyApprovalRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Legacy endpoint alias for POST /api/v1/travel/approve with strict authentication and authorization."""
     if not request_data.approved and not request_data.feedback.strip():
         return JSONResponse(
             status_code=400,
@@ -332,45 +412,29 @@ async def legacy_approve(request_data: LegacyApprovalRequest, request: Request):
         thread_id=request_data.thread_id,
         approved=request_data.approved,
         feedback=request_data.feedback,
+        user_id=current_user.get("id"),
     )
     return JSONResponse(content={"success": True, **result})
 
 
 @app.get("/health")
-async def legacy_health(request: Request):
-    """Legacy endpoint alias for GET /api/v1/health."""
-    return {
+async def legacy_health():
+    """Minimal public health check."""
+    res = {
         "status": "ok",
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "features": [
-            "health",
-            "status",
-            "ai_analysis",
-            "auth",
-            "watchlists",
-            "alerts",
-            "assets",
-            "financial",
-            "admin",
-            "ai",
+    }
+    if not settings.is_production:
+        res["features"] = [
             "supervisor_agent",
             "parallel_supervisor_agent",
             "pydantic_output_guardrail",
             "human_in_the_loop",
             "async_sse_streaming",
             "sliding_window_rate_limiter",
-            "request_correlation_tracing",
-            "ttl_mcp_caching",
-            "circuit_breaker_resilience",
-            "observability_runs_api",
-            "prometheus_metrics",
-            "background_task_queue",
-            "gds_booking_adapter",
-            "alembic_migrations",
-        ],
-    }
-
+        ]
+    return res
 
 
 if __name__ == "__main__":
@@ -379,4 +443,12 @@ if __name__ == "__main__":
         port = int(raw_port)
     except ValueError:
         port = 8000
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
+    allowed_proxies = ",".join(settings.TRUSTED_PROXIES) if settings.TRUSTED_PROXIES else "127.0.0.1"
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips=allowed_proxies,
+        reload=False,
+    )

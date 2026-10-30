@@ -82,10 +82,12 @@ class AuthService:
     def request_password_reset(self, email: str) -> Dict[str, Any]:
         """Generates a secure password reset token without leaking account existence."""
         reset_token = self._repo.create_password_reset_token(email)
-        return {
+        res: Dict[str, Any] = {
             "message": "If an account matches that email address, password reset instructions have been dispatched.",
-            "reset_token": reset_token,
         }
+        if not settings.is_production:
+            res["reset_token"] = reset_token
+        return res
 
     def reset_password(self, reset_token: str, new_password: str) -> bool:
         """Validates token and updates user account password."""

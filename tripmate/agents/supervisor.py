@@ -7,11 +7,15 @@ The Supervisor Agent orchestrates dynamic plan creation and agent routing:
 3. Consults the AgentRegistry to determine available agent capabilities.
 """
 
+import logging
 from typing import List, Any
 from pydantic import BaseModel, Field
 
+from tripmate.config.settings import settings
 from tripmate.agents.planner import planner
 from tripmate.agents.registry import agent_registry
+
+logger = logging.getLogger("tripmate.supervisor")
 
 KNOWN_AGENTS = {
     "flight_agent",
@@ -60,6 +64,8 @@ async def run_supervisor_routing(llm: Any, user_query: str) -> SupervisorRouting
         if "itinerary_agent" not in validated_agents:
             validated_agents.append("itinerary_agent")
 
+        validated_agents = validated_agents[:settings.MAX_PARALLEL_AGENTS]
+
         raw_constraints = plan_dag.trip_constraints
         constraints = TripConstraints(
             destination=raw_constraints.get("destination", ""),
@@ -76,9 +82,9 @@ async def run_supervisor_routing(llm: Any, user_query: str) -> SupervisorRouting
             reasoning=plan_dag.reasoning or "Dynamic DAG plan selected.",
         )
     except Exception as exc:
-        print(f"Supervisor routing fallback: {exc}")
+        logger.warning(f"Supervisor routing fallback: {exc}")
 
     return SupervisorRouting(
-        selected_agents=AGENT_ORDER.copy(),
-        reasoning="Fallback routing selected full default workflow.",
+        selected_agents=AGENT_ORDER[:settings.MAX_PARALLEL_AGENTS],
+        reasoning="Fallback routing selected default workflow.",
     )

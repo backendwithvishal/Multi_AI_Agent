@@ -106,7 +106,13 @@ async def get_current_user(
             if user:
                 return user
 
-    # 2. Check if master API_KEY was supplied
+    # 2. Check if user-level API key was supplied (hashed SHA-256 match)
+    if token:
+        user_by_key = store.get_user_by_api_key(token)
+        if user_by_key:
+            return user_by_key
+
+    # 3. Check if master API_KEY was supplied
     if token and settings.API_KEY and secrets.compare_digest(token, settings.API_KEY):
         return {
             "id": "user_admin_001",
@@ -115,7 +121,7 @@ async def get_current_user(
             "role": "admin",
         }
 
-    # 3. If in development mode and no token provided, return demo user
+    # 4. If in development mode and no token provided, return demo user
     if not settings.AUTH_REQUIRED and not token:
         return {
             "id": "user_demo_002",
@@ -151,17 +157,20 @@ async def require_admin(
 
 
 async def validate_thread_ownership(thread_id: str, request_user_id: Optional[str] = None) -> bool:
-    """Validates user authorization and thread ownership for a specific thread ID."""
-    if not thread_id or not request_user_id:
+    """Validates user authorization and thread ownership for a specific thread ID.
+    Rejects unknown or foreign thread IDs with 404 to avoid enumeration attacks.
+    """
+    if not thread_id:
         return True
 
     registered_owner = store.get_thread_owner(thread_id)
-    if registered_owner and registered_owner != request_user_id:
+    # Reject unknown or foreign thread IDs with 404 (not 403) to prevent enumeration
+    if not registered_owner or (request_user_id and registered_owner != request_user_id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail={
-                "code": "FORBIDDEN",
-                "message": f"User is not authorized to access or modify thread '{thread_id}'.",
+                "code": "THREAD_NOT_FOUND",
+                "message": f"Thread '{thread_id}' not found or access is not authorized.",
             },
         )
     return True

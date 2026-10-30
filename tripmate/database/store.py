@@ -136,11 +136,53 @@ class DataStore(metaclass=SingletonMeta):
         self._assets: Dict[str, Dict[str, Any]] = {}
         self._reset_tokens: Dict[str, Dict[str, Any]] = {}
         self._thread_owners: Dict[str, str] = {}
+        self._api_keys: Dict[str, Dict[str, Any]] = {}
         self._start_time = time.time()
         self._seed_initial_data()
 
+    def create_api_key(self, user_id: str, name: str = "default") -> str:
+        """Generates a secure user API key, stores its SHA-256 hash, and returns raw key."""
+        raw_key = f"tm_live_{secrets.token_urlsafe(32)}"
+        key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        self._api_keys[key_hash] = {
+            "key_hash": key_hash,
+            "user_id": user_id,
+            "name": name,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if user_id not in self._users:
+            self._users[user_id] = {
+                "id": user_id,
+                "username": user_id,
+                "email": f"{user_id}@tripmate.ai",
+                "role": "user",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        return raw_key
+
+    def get_user_by_api_key(self, raw_key: str) -> Optional[Dict[str, Any]]:
+        """Validates raw API key by SHA-256 hash lookup and returns user dict."""
+        if not raw_key or not isinstance(raw_key, str):
+            return None
+        key_hash = hashlib.sha256(raw_key.strip().encode("utf-8")).hexdigest()
+        record = self._api_keys.get(key_hash)
+        if record:
+            user = self.get_user_by_id(record["user_id"])
+            if not user:
+                return {
+                    "id": record["user_id"],
+                    "username": record["user_id"],
+                    "email": f"{record['user_id']}@tripmate.ai",
+                    "role": "user",
+                }
+            return user
+        return None
+
     def _seed_initial_data(self):
-        """Seeds default admin and demo user accounts in memory and PostgreSQL."""
+        """Seeds default accounts in development and test environments only."""
+        if settings.is_production:
+            return
+
         admin_id = "user_admin_001"
         admin_data = {
             "id": admin_id,

@@ -248,26 +248,41 @@ def initialize_checkpointer():
 
             checkpointer_pool = ConnectionPool(
                 db_url,
-                min_size=1,
-                max_size=10,
+                min_size=settings.DB_POOL_MIN_SIZE,
+                max_size=settings.DB_POOL_MAX_SIZE,
+                timeout=settings.DB_POOL_TIMEOUT_SECONDS,
+                check=getattr(ConnectionPool, "check_connection", None),
                 kwargs={"row_factory": dict_row},
                 open=True,
             )
             saver = PostgresSaver(checkpointer_pool)
             pg_checkpointer = PostgresCheckpointer(saver, checkpointer_pool)
-            print("PostgresSaver checkpointer successfully initialized.")
+            logger.info("PostgresSaver checkpointer successfully initialized.")
             return pg_checkpointer
         except Exception as exc:
-            if settings.APP_ENV == "production":
+            if settings.is_production:
                 raise RuntimeError(
                     f"Production startup failed: PostgreSQL checkpointer initialization error: {exc}"
                 )
-            print(f"PostgreSQL connection failed ({exc}). Falling back to MemorySaver for development.")
+            logger.warning(f"PostgreSQL connection failed ({exc}). Falling back to MemorySaver for development.")
 
-    if settings.APP_ENV == "production":
-        print("WARNING: DATABASE_URL not configured. Running in production mode with MemorySaver checkpointer.")
+    if settings.is_production:
+        raise RuntimeError(
+            "Production startup failed: DATABASE_URL not configured. PostgreSQL checkpointer is strictly required in production."
+        )
 
     return MemorySaver() if MemorySaver else None
+
+
+def close_checkpointer():
+    global checkpointer_pool
+    if checkpointer_pool is not None:
+        try:
+            checkpointer_pool.close()
+            logger.info("checkpointer_pool connection pool closed.")
+        except Exception as exc:
+            logger.warning(f"Error closing checkpointer_pool: {exc}")
+        checkpointer_pool = None
 
 
 checkpointer = initialize_checkpointer()

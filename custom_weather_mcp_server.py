@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-import requests
+import httpx
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
@@ -23,7 +23,7 @@ load_dotenv(BASE_DIR / ".env")
 mcp = FastMCP("Weather MCP Server")
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
-REQUEST_TIMEOUT_SECONDS = 20
+REQUEST_TIMEOUT_SECONDS = 10.0
 
 
 def _get_api_key() -> str:
@@ -36,32 +36,40 @@ def _get_api_key() -> str:
     return key.strip()
 
 
-def _request_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
-    """Sends HTTP GET request to OpenWeather API and returns JSON response."""
+from urllib.parse import urlparse
+
+ALLOWED_WEATHER_HOSTS = ["api.openweathermap.org"]
+MAX_WEATHER_RESPONSE_BYTES = 50_000
+
+
+async def _request_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Sends async non-blocking HTTP GET request to OpenWeather API with SSRF protection."""
+    parsed = urlparse(url)
+    if parsed.hostname not in ALLOWED_WEATHER_HOSTS:
+        raise ValueError(f"SSRF Protection: Host '{parsed.hostname}' is not in allowed weather hosts.")
+
     try:
-        response = requests.get(
-            url,
-            params=params,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as exc:
-        details = ""
-        failed_response = getattr(exc, "response", None)
-        if failed_response is not None:
-            details = f" Response: {failed_response.text[:500]}"
-        raise RuntimeError(f"OpenWeather request failed: {exc}.{details}") from exc
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            if len(response.content) > MAX_WEATHER_RESPONSE_BYTES:
+                raise ValueError(f"Response size exceeded {MAX_WEATHER_RESPONSE_BYTES} bytes limit.")
+            return response.json()
+    except httpx.HTTPStatusError as exc:
+        details = f" Response: {exc.response.text[:500]}"
+        raise RuntimeError(f"OpenWeather request failed with status {exc.response.status_code}.{details}") from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"OpenWeather network request failed: {exc}") from exc
 
 
 @mcp.tool()
-def get_current_weather(city: str) -> dict[str, Any]:
+async def get_current_weather(city: str) -> dict[str, Any]:
     """MCP Tool: Return current weather metrics for a destination city."""
     city = city.strip()
     if not city:
         raise ValueError("city cannot be empty")
 
-    data = _request_json(
+    data = await _request_json(
         "https://api.openweathermap.org/data/2.5/weather",
         {
             "q": city,
@@ -81,13 +89,13 @@ def get_current_weather(city: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_forecast(city: str) -> dict[str, Any]:
+async def get_forecast(city: str) -> dict[str, Any]:
     """MCP Tool: Return the first five 3-hour forecast entries for a destination city."""
     city = city.strip()
     if not city:
         raise ValueError("city cannot be empty")
 
-    data = _request_json(
+    data = await _request_json(
         "https://api.openweathermap.org/data/2.5/forecast",
         {
             "q": city,

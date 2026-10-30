@@ -7,11 +7,16 @@ Provides an async cache interface with optional Redis backend fallback:
 """
 
 import asyncio
+import hashlib
 import inspect
 import json
+import logging
 import os
 from typing import Any, Callable, Dict, Optional
 from tripmate.cache.ttl_cache import app_cache, BoundedAsyncTTLCache
+from tripmate.config.settings import settings
+
+logger = logging.getLogger("tripmate.cache")
 
 try:
     import redis.asyncio as aioredis  # type: ignore[import-untyped,import-not-found]
@@ -41,11 +46,11 @@ class RedisHybridCache:
                     socket_connect_timeout=1.0,
                 )
                 self._use_redis = True
-                print("[Cache] Redis Hybrid Cache initialized with active REDIS_URL.")
+                logger.info("[Cache] Redis Hybrid Cache initialized with active REDIS_URL.")
             except Exception as exc:
-                print(f"[Cache] Redis connection failed ({exc}). Falling back to BoundedAsyncTTLCache.")
+                logger.warning(f"[Cache] Redis connection failed ({exc}). Falling back to BoundedAsyncTTLCache.")
         elif self.redis_url and aioredis is None:
-            print("[Cache] redis package not installed. Falling back to BoundedAsyncTTLCache.")
+            logger.warning("[Cache] redis package not installed. Falling back to BoundedAsyncTTLCache.")
 
     async def get(self, namespace: str, key_data: Any) -> Optional[Any]:
         """Fetches value from Redis or fallback in-memory cache."""
@@ -105,6 +110,82 @@ class RedisHybridCache:
             return res
 
         return await self.in_memory.get_or_set(namespace, key_data, _execution_wrapper, ttl_seconds)
+
+    def _build_mcp_cache_key(self, namespace: str, query_data: Any, user_id: Optional[str] = None) -> str:
+        """Constructs a tenant/user-isolated SHA-256 hashed cache key."""
+        user_scope = f"u_{user_id}" if user_id else "public"
+        serialized = json.dumps(query_data, sort_keys=True, default=str)
+        hash_digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        return f"tripmate:mcp:{namespace}:{user_scope}:{hash_digest}"
+
+    async def get_mcp(self, namespace: str, query_data: Any, user_id: Optional[str] = None) -> Optional[Any]:
+        """Fetches cached MCP tool output with fallback protection."""
+        cache_key = self._build_mcp_cache_key(namespace, query_data, user_id)
+        if self._use_redis and self._redis_client:
+            try:
+                val = await self._redis_client.get(cache_key)
+                if val is not None:
+                    try:
+                        return json.loads(val)
+                    except Exception:
+                        return val
+            except Exception as exc:
+                logger.warning(f"[Cache] Redis get_mcp failed ({exc}). Falling back to memory.")
+        return await self.in_memory.get(f"mcp:{namespace}", query_data)
+
+    async def set_mcp(
+        self,
+        namespace: str,
+        query_data: Any,
+        value: Any,
+        user_id: Optional[str] = None,
+        ttl_seconds: Optional[int] = None,
+    ) -> None:
+        """Stores MCP output in Redis with size limits and TTL, mirroring to in-memory fallback."""
+        if value is None:
+            return
+        serialized_val = json.dumps(value, default=str)
+        val_bytes = serialized_val.encode("utf-8")
+        if len(val_bytes) > settings.MCP_CACHE_MAX_BYTES:
+            logger.warning(
+                f"[Cache] MCP response exceeded max size ({len(val_bytes)} > {settings.MCP_CACHE_MAX_BYTES} bytes). Skipping cache."
+            )
+            return
+
+        ttl = ttl_seconds or settings.MCP_CACHE_TTL_SECONDS
+        await self.in_memory.set(f"mcp:{namespace}", query_data, value, ttl)
+        if self._use_redis and self._redis_client:
+            try:
+                cache_key = self._build_mcp_cache_key(namespace, query_data, user_id)
+                await self._redis_client.set(cache_key, serialized_val, ex=ttl)
+            except Exception as exc:
+                logger.warning(f"[Cache] Redis set_mcp failed ({exc}).")
+
+    async def get_or_set_mcp(
+        self,
+        namespace: str,
+        query_data: Any,
+        coro_func: Callable[[], Any],
+        user_id: Optional[str] = None,
+        ttl_seconds: Optional[int] = None,
+    ) -> Any:
+        """Coalesced Get-or-Set for MCP responses with Redis and memory fallback."""
+        cached = await self.get_mcp(namespace, query_data, user_id)
+        if cached is not None:
+            return cached
+
+        async def _mcp_wrapper():
+            if asyncio.iscoroutinefunction(coro_func):
+                res = await coro_func()
+            else:
+                res = coro_func()
+                if inspect.isawaitable(res):
+                    res = await res
+            if res is not None:
+                await self.set_mcp(namespace, query_data, res, user_id, ttl_seconds)
+            return res
+
+        return await self.in_memory.get_or_set(f"mcp:{namespace}", query_data, _mcp_wrapper, ttl_seconds)
 
     async def clear(self) -> None:
         """Clears both in-memory cache and Redis keys if connected."""

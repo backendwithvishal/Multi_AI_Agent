@@ -304,7 +304,22 @@ class AdminResetBreakerRequest(BaseModel):
 # 10. AI Orchestration Schemas
 # =========================================================
 
+import re
+from tripmate.config.settings import settings
+
+CONTROL_CHARS_REGEX = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def strip_control_chars(text: str) -> str:
+    """Strips ASCII control characters from input string while preserving newlines and tabs."""
+    if isinstance(text, str):
+        return CONTROL_CHARS_REGEX.sub("", text)
+    return text
+
+
 class TravelRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
     message: str = Field(
         ...,
         min_length=1,
@@ -313,7 +328,7 @@ class TravelRequest(BaseModel):
     )
     thread_id: Optional[str] = Field(
         default=None,
-        max_length=100,
+        max_length=128,
         description="Optional unique identifier for continuing an existing conversation thread.",
     )
     user_id: Optional[str] = Field(
@@ -324,18 +339,36 @@ class TravelRequest(BaseModel):
 
     @field_validator("message")
     @classmethod
-    def validate_message_not_whitespace(cls, v: str) -> str:
-        cleaned = v.strip()
+    def validate_message(cls, v: str) -> str:
+        cleaned = strip_control_chars(v).strip()
         if not cleaned:
             raise ValueError("Message cannot consist only of whitespace.")
+        if len(cleaned) > settings.MAX_MESSAGE_LENGTH:
+            raise ValueError(f"Message exceeds maximum allowed length of {settings.MAX_MESSAGE_LENGTH} characters.")
+        return cleaned
+
+    @field_validator("thread_id")
+    @classmethod
+    def validate_thread_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        cleaned = strip_control_chars(v).strip()
+        if not cleaned:
+            return None
+        if not re.match(settings.THREAD_ID_REGEX, cleaned):
+            raise ValueError(
+                f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'."
+            )
         return cleaned
 
 
 class ApprovalRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
     thread_id: str = Field(
         ...,
         min_length=1,
-        max_length=100,
+        max_length=128,
         description="Required thread ID of the paused execution graph.",
     )
     approved: bool = Field(
@@ -353,10 +386,23 @@ class ApprovalRequest(BaseModel):
         description="Optional identity string for authorization and thread ownership validation.",
     )
 
+    @field_validator("thread_id")
+    @classmethod
+    def validate_thread_id(cls, v: str) -> str:
+        cleaned = strip_control_chars(v).strip()
+        if not re.match(settings.THREAD_ID_REGEX, cleaned):
+            raise ValueError(
+                f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'."
+            )
+        return cleaned
+
     @field_validator("feedback")
     @classmethod
     def validate_feedback(cls, v: str) -> str:
-        return v.strip()
+        cleaned = strip_control_chars(v).strip()
+        if len(cleaned) > settings.MAX_FEEDBACK_LENGTH:
+            raise ValueError(f"Feedback exceeds maximum allowed length of {settings.MAX_FEEDBACK_LENGTH} characters.")
+        return cleaned
 
 
 class AIPlanRequest(BaseModel):

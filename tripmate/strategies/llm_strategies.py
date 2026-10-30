@@ -5,6 +5,7 @@ Defines strategy contracts and concrete provider strategies for Groq, OpenRouter
 and Hugging Face model execution, decoupling provider selection from routing logic.
 """
 
+import logging
 import os
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -14,6 +15,7 @@ from dotenv import load_dotenv
 
 from tripmate.config.settings import settings
 
+logger = logging.getLogger("tripmate.llm_strategies")
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
@@ -45,7 +47,7 @@ def create_openai_compatible_client(model_name: str, api_key: str, base_url: str
             request_timeout=timeout,
         )
     except Exception as exc:
-        print(f"OpenAI-compatible client creation notice: {exc}")
+        logger.warning(f"OpenAI-compatible client creation notice: {exc}")
         return None
 
 
@@ -112,7 +114,7 @@ class GroqProviderStrategy(LLMProviderStrategy):
                 timeout=timeout,
             )
         except Exception as exc:
-            print(f"GroqProviderStrategy initialization notice: {exc}")
+            logger.warning(f"GroqProviderStrategy initialization notice: {exc}")
             return None
 
 
@@ -158,7 +160,7 @@ class OpenRouterProviderStrategy(LLMProviderStrategy):
                 timeout=timeout,
             )
         except Exception as exc:
-            print(f"OpenRouterProviderStrategy initialization notice: {exc}")
+            logger.warning(f"OpenRouterProviderStrategy initialization notice: {exc}")
             return None
 
 
@@ -206,5 +208,5 @@ class HuggingFaceProviderStrategy(LLMProviderStrategy):
                 timeout=timeout,
             )
         except Exception as exc:
-            print(f"HuggingFaceProviderStrategy initialization notice: {exc}")
+            logger.warning(f"HuggingFaceProviderStrategy initialization notice: {exc}")
             return None
