@@ -16,6 +16,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from tripmate.schemas.agents import TaskSpec, PlanDAG
 from tripmate.agents.registry import agent_registry
+from tripmate.config.settings import settings
+from tripmate.integrations.llm_resilience import invoke_llm_with_resilience
 
 logger = logging.getLogger("tripmate.planner")
 
@@ -85,11 +87,13 @@ User Request: {user_query}
 """
 
         try:
-            response = await llm.ainvoke(
+            response = await invoke_llm_with_resilience(
+                llm,
                 [
                     SystemMessage(content="You create structured multi-agent task execution plans. Return strict JSON only."),
                     HumanMessage(content=prompt),
-                ]
+                ],
+                timeout=settings.LLM_TIMEOUT_SECONDS,
             )
             cleaned = str(response.content).strip()
             if "```json" in cleaned:

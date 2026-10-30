@@ -15,6 +15,8 @@ from typing import Any, Dict
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from tripmate.schemas.agents import CriticReport
+from tripmate.config.settings import settings
+from tripmate.integrations.llm_resilience import invoke_llm_with_resilience
 
 logger = logging.getLogger("tripmate.critic")
 
@@ -71,11 +73,13 @@ Return strict JSON matching this schema:
 """
 
         try:
-            response = await llm.ainvoke(
+            response = await invoke_llm_with_resilience(
+                llm,
                 [
                     SystemMessage(content="You validate multi-agent outputs for accuracy and safety. Return strict JSON only."),
                     HumanMessage(content=prompt),
-                ]
+                ],
+                timeout=settings.LLM_TIMEOUT_SECONDS,
             )
             cleaned = str(response.content).strip()
             if "```json" in cleaned:

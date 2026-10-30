@@ -35,6 +35,7 @@ from tripmate.factories.agent_factory import AgentFactory
 
 
 from tripmate.config.settings import settings
+from tripmate.integrations.llm_resilience import invoke_llm_with_resilience
 from tripmate.agents.guardrail import (
     wrap_untrusted_user_input,
     wrap_untrusted_tool_data,
@@ -89,7 +90,8 @@ Provide flight advice: departure/arrival airport options, airlines, estimated ai
                     details="LLM unconfigured default response.",
                 )
             else:
-                response = await llm.ainvoke(
+                response = await invoke_llm_with_resilience(
+                    llm,
                     [
                         SystemMessage(
                             content=(
@@ -99,7 +101,8 @@ Provide flight advice: departure/arrival airport options, airlines, estimated ai
                             )
                         ),
                         HumanMessage(content=prompt),
-                    ]
+                    ],
+                    timeout=settings.LLM_TIMEOUT_SECONDS,
                 )
                 result_text = str(response.content)
                 evidence = EvidenceItem(
@@ -294,7 +297,8 @@ Weather Results:
 Analyze budget feasibility, cost estimates, risk areas, and money-saving tips.
 """
         try:
-            response = await llm.ainvoke(
+            response = await invoke_llm_with_resilience(
+                llm,
                 [
                     SystemMessage(
                         content=(
@@ -304,7 +308,8 @@ Analyze budget feasibility, cost estimates, risk areas, and money-saving tips.
                         )
                     ),
                     HumanMessage(content=prompt),
-                ]
+                ],
+                timeout=settings.LLM_TIMEOUT_SECONDS,
             )
             return StructuredAgentOutput(
                 agent_name=self.name,
@@ -387,7 +392,8 @@ Budget:
 Create a clear, practical day-by-day draft itinerary ready for human review.
 """
         try:
-            response = await llm.ainvoke(
+            response = await invoke_llm_with_resilience(
+                llm,
                 [
                     SystemMessage(
                         content=(
@@ -397,7 +403,8 @@ Create a clear, practical day-by-day draft itinerary ready for human review.
                         )
                     ),
                     HumanMessage(content=prompt),
-                ]
+                ],
+                timeout=settings.LLM_TIMEOUT_SECONDS,
             )
             return StructuredAgentOutput(
                 agent_name=self.name,
@@ -543,7 +550,8 @@ Format final output with clear sections:
 7. Final Recommendations
 """
     try:
-        response = await llm.ainvoke(
+        response = await invoke_llm_with_resilience(
+            llm,
             [
                 SystemMessage(
                     content=(
@@ -553,7 +561,8 @@ Format final output with clear sections:
                     )
                 ),
                 HumanMessage(content=prompt),
-            ]
+            ],
+            timeout=settings.LLM_TIMEOUT_SECONDS,
         )
         return str(response.content)
     except Exception as exc:

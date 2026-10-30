@@ -7,6 +7,7 @@ Endpoints:
 - GET /api/v1/auth/me: Retrieve current authenticated user profile
 """
 
+import asyncio
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from tripmate.schemas import (
@@ -39,7 +40,7 @@ async def register(
 ):
     request_id = getattr(request.state, "request_id", "req_auth")
     try:
-        token_data = auth_service.register_user(req, admin_secret=x_admin_secret)
+        token_data = await asyncio.to_thread(auth_service.register_user, req, admin_secret=x_admin_secret)
         return APIResponse(
             success=True,
             data=TokenResponse(**token_data),
@@ -62,7 +63,7 @@ async def register(
 async def login(req: UserLoginRequest, request: Request):
     request_id = getattr(request.state, "request_id", "req_auth")
     try:
-        token_data = auth_service.authenticate_user(req)
+        token_data = await asyncio.to_thread(auth_service.authenticate_user, req)
         return APIResponse(
             success=True,
             data=TokenResponse(**token_data),
@@ -84,7 +85,7 @@ async def login(req: UserLoginRequest, request: Request):
 )
 async def forgot_password(req: ForgotPasswordRequest, request: Request):
     request_id = getattr(request.state, "request_id", "req_auth")
-    result = auth_service.request_password_reset(req.email)
+    result = await asyncio.to_thread(auth_service.request_password_reset, req.email)
     return APIResponse(
         success=True,
         data=ForgotPasswordResponse(**result),
@@ -102,7 +103,7 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request):
 async def reset_password(req: ResetPasswordRequest, request: Request):
     request_id = getattr(request.state, "request_id", "req_auth")
     try:
-        auth_service.reset_password(req.reset_token, req.new_password)
+        await asyncio.to_thread(auth_service.reset_password, req.reset_token, req.new_password)
         return APIResponse(
             success=True,
             data={"message": "Password successfully updated. Please log in with your new credentials."},

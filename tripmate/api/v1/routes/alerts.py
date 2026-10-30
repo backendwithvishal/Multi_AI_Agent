@@ -8,6 +8,7 @@ Endpoints:
 - DELETE /api/v1/alerts/{alert_id}: Delete alert notification
 """
 
+import asyncio
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from tripmate.schemas import APIResponse, AlertCreateRequest, AlertItem
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/alerts", tags=["Alerts & Notifications"])
 )
 async def list_alerts(request: Request, current_user: Dict[str, Any] = Depends(get_current_user)):
     request_id = getattr(request.state, "request_id", "req_alt")
-    alerts = alert_service.list_alerts(current_user["id"])
+    alerts = await asyncio.to_thread(alert_service.list_alerts, current_user["id"])
     return APIResponse(
         success=True,
         data=alerts,
@@ -46,7 +47,7 @@ async def create_alert(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_alt")
-    alert = alert_service.create_alert(current_user["id"], req)
+    alert = await asyncio.to_thread(alert_service.create_alert, current_user["id"], req)
     return APIResponse(
         success=True,
         data=alert,
@@ -67,7 +68,7 @@ async def mark_read(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_alt")
-    alert = alert_service.mark_as_read(alert_id, current_user["id"])
+    alert = await asyncio.to_thread(alert_service.mark_as_read, alert_id, current_user["id"])
     if not alert:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -93,7 +94,7 @@ async def delete_alert(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_alt")
-    deleted = alert_service.delete_alert(alert_id, current_user["id"])
+    deleted = await asyncio.to_thread(alert_service.delete_alert, alert_id, current_user["id"])
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

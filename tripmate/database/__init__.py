@@ -236,15 +236,38 @@ def check_db_health() -> Dict[str, Any]:
         }
 
 
+def setup_checkpoint_tables(db_url: Optional[str] = None) -> bool:
+    """Explicitly and idempotently initializes LangGraph PostgresSaver tables in PostgreSQL."""
+    url = db_url or get_formatted_db_url()
+    if not url or not psycopg or not PostgresSaver:
+        return False
+    try:
+        with psycopg.connect(url, autocommit=True, row_factory=dict_row) as sync_conn:
+            sync_saver = PostgresSaver(sync_conn)
+            sync_saver.setup()
+        logger.info("[Checkpointer] Explicit PostgreSQL checkpoint tables verified and ready.")
+        return True
+    except Exception as exc:
+        logger.error(f"[Checkpointer] Error setting up PostgreSQL checkpoint tables: {exc}")
+        raise
+
+
 def initialize_checkpointer():
+    """Initializes workflow checkpointer with strict production fail-fast rules.
+    
+    Rules:
+    - In production or any environment where ENV != 'dev', PostgreSQL is strictly required.
+      If PostgresSaver cannot initialize, fail startup with RuntimeError.
+    - MemorySaver is ONLY permitted when ENV='dev' (or development).
+    - Connection pool is configured with min/max size, timeout, and health checks.
+    """
     global checkpointer_pool
     db_url = get_formatted_db_url()
+    is_dev = (settings.ENV in ("dev", "development") or settings.APP_ENV in ("dev", "development")) and not settings.is_production
 
     if db_url and psycopg and PostgresSaver and ConnectionPool:
         try:
-            with psycopg.connect(db_url, autocommit=True, row_factory=dict_row) as sync_conn:
-                sync_saver = PostgresSaver(sync_conn)
-                sync_saver.setup()
+            setup_checkpoint_tables(db_url)
 
             checkpointer_pool = ConnectionPool(
                 db_url,
@@ -252,23 +275,26 @@ def initialize_checkpointer():
                 max_size=settings.DB_POOL_MAX_SIZE,
                 timeout=settings.DB_POOL_TIMEOUT_SECONDS,
                 check=getattr(ConnectionPool, "check_connection", None),
+                max_idle=300.0,
+                max_lifetime=3600.0,
                 kwargs={"row_factory": dict_row},
                 open=True,
             )
             saver = PostgresSaver(checkpointer_pool)
             pg_checkpointer = PostgresCheckpointer(saver, checkpointer_pool)
-            logger.info("PostgresSaver checkpointer successfully initialized.")
+            logger.info("PostgresSaver checkpointer successfully initialized with connection pool health checks.")
             return pg_checkpointer
         except Exception as exc:
-            if settings.is_production:
+            if not is_dev:
                 raise RuntimeError(
-                    f"Production startup failed: PostgreSQL checkpointer initialization error: {exc}"
+                    f"Production/Non-dev startup failed: PostgreSQL checkpointer initialization error: {exc}"
                 )
             logger.warning(f"PostgreSQL connection failed ({exc}). Falling back to MemorySaver for development.")
 
-    if settings.is_production:
+    if not is_dev:
         raise RuntimeError(
-            "Production startup failed: DATABASE_URL not configured. PostgreSQL checkpointer is strictly required in production."
+            "Production startup failed: DATABASE_URL not configured. "
+            "PostgreSQL checkpointer is strictly required in production (MemorySaver only permitted when ENV=dev)."
         )
 
     return MemorySaver() if MemorySaver else None

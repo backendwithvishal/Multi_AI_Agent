@@ -8,6 +8,7 @@ This module provides reusable FastAPI dependency functions for endpoint security
 4. `validate_thread_ownership`: Ensures authenticated users can only access their own conversation threads.
 """
 
+import asyncio
 import secrets
 from typing import Any, Dict, Optional
 from fastapi import Header, HTTPException, status
@@ -102,13 +103,13 @@ async def get_current_user(
     if token:
         claims = verify_token(token)
         if claims:
-            user = store.get_user_by_id(claims.get("uid", ""))
+            user = await asyncio.to_thread(store.get_user_by_id, claims.get("uid", ""))
             if user:
                 return user
 
     # 2. Check if user-level API key was supplied (hashed SHA-256 match)
     if token:
-        user_by_key = store.get_user_by_api_key(token)
+        user_by_key = await asyncio.to_thread(store.get_user_by_api_key, token)
         if user_by_key:
             return user_by_key
 
@@ -163,7 +164,7 @@ async def validate_thread_ownership(thread_id: str, request_user_id: Optional[st
     if not thread_id:
         return True
 
-    registered_owner = store.get_thread_owner(thread_id)
+    registered_owner = await asyncio.to_thread(store.get_thread_owner, thread_id)
     # Reject unknown or foreign thread IDs with 404 (not 403) to prevent enumeration
     if not registered_owner or (request_user_id and registered_owner != request_user_id):
         raise HTTPException(

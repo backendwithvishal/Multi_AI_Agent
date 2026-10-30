@@ -8,6 +8,7 @@ Endpoints:
 - DELETE /api/v1/assets/{asset_id}: Delete a travel asset
 """
 
+import asyncio
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from tripmate.schemas import APIResponse, AssetCreateRequest, AssetItem
@@ -29,7 +30,7 @@ async def list_assets(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_ast")
-    assets = asset_service.list_assets(current_user["id"], trip_id=trip_id)
+    assets = await asyncio.to_thread(asset_service.list_assets, current_user["id"], trip_id=trip_id)
     return APIResponse(
         success=True,
         data=assets,
@@ -50,7 +51,7 @@ async def create_asset(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_ast")
-    asset = asset_service.create_asset(current_user["id"], req)
+    asset = await asyncio.to_thread(asset_service.create_asset, current_user["id"], req)
     return APIResponse(
         success=True,
         data=asset,
@@ -71,7 +72,7 @@ async def get_asset(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_ast")
-    asset = asset_service.get_asset(asset_id, current_user["id"])
+    asset = await asyncio.to_thread(asset_service.get_asset, asset_id, current_user["id"])
     if not asset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -97,7 +98,7 @@ async def delete_asset(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_ast")
-    deleted = asset_service.delete_asset(asset_id, current_user["id"])
+    deleted = await asyncio.to_thread(asset_service.delete_asset, asset_id, current_user["id"])
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

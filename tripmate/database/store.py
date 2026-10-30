@@ -141,14 +141,16 @@ class DataStore(metaclass=SingletonMeta):
         self._seed_initial_data()
 
     def create_api_key(self, user_id: str, name: str = "default") -> str:
-        """Generates a secure user API key, stores its SHA-256 hash, and returns raw key."""
+        """Generates a secure user API key, stores its SHA-256 hash in PostgreSQL and memory, and returns raw key."""
+        self._ensure_user_exists(user_id)
         raw_key = f"tm_live_{secrets.token_urlsafe(32)}"
         key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        now_dt = datetime.now(timezone.utc)
         self._api_keys[key_hash] = {
             "key_hash": key_hash,
             "user_id": user_id,
             "name": name,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now_dt.isoformat(),
         }
         if user_id not in self._users:
             self._users[user_id] = {
@@ -156,15 +158,63 @@ class DataStore(metaclass=SingletonMeta):
                 "username": user_id,
                 "email": f"{user_id}@tripmate.ai",
                 "role": "user",
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": now_dt.isoformat(),
             }
+
+        pool = get_db_pool()
+        if pool:
+            try:
+                with pool.connection() as conn:
+                    with conn.cursor() as cur:
+                        key_id = f"key_{uuid.uuid4().hex[:12]}"
+                        cur.execute(
+                            """
+                            INSERT INTO api_keys (id, key_hash, user_id, name, created_at, is_active)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (key_hash) DO NOTHING;
+                            """,
+                            (key_id, key_hash, user_id, name, now_dt, True),
+                        )
+                    conn.commit()
+            except Exception as exc:
+                logger.warning(f"PostgreSQL create_api_key failed: {exc}")
+
         return raw_key
 
     def get_user_by_api_key(self, raw_key: str) -> Optional[Dict[str, Any]]:
-        """Validates raw API key by SHA-256 hash lookup and returns user dict."""
+        """Validates raw API key by SHA-256 hash lookup in PostgreSQL or memory and returns user dict."""
         if not raw_key or not isinstance(raw_key, str):
             return None
         key_hash = hashlib.sha256(raw_key.strip().encode("utf-8")).hexdigest()
+
+        pool = get_db_pool()
+        if pool:
+            try:
+                with pool.connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT u.id, u.username, u.email, u.role, u.created_at, k.is_active
+                            FROM api_keys k
+                            JOIN users u ON k.user_id = u.id
+                            WHERE k.key_hash = %s AND k.is_active = true;
+                            """,
+                            (key_hash,),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            user = {
+                                "id": row["id"],
+                                "username": row["username"],
+                                "email": row["email"],
+                                "role": row["role"],
+                                "created_at": _format_datetime(row["created_at"]),
+                            }
+                            self._users[user["id"]] = user
+                            return user
+            except Exception as exc:
+                logger.warning(f"PostgreSQL get_user_by_api_key failed: {exc}")
+
         record = self._api_keys.get(key_hash)
         if record:
             user = self.get_user_by_id(record["user_id"])
@@ -177,6 +227,51 @@ class DataStore(metaclass=SingletonMeta):
                 }
             return user
         return None
+
+    def record_token_usage(self, user_id: str, tokens: int, requests: int = 1) -> None:
+        """Records token usage into usage_budgets table in PostgreSQL and in-memory cache."""
+        self._ensure_user_exists(user_id)
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        pool = get_db_pool()
+        if pool:
+            try:
+                with pool.connection() as conn:
+                    with conn.cursor() as cur:
+                        budget_id = f"bg_{uuid.uuid4().hex[:12]}"
+                        cur.execute(
+                            """
+                            INSERT INTO usage_budgets (id, user_id, date_str, token_count, request_count, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (user_id, date_str) 
+                            DO UPDATE SET 
+                                token_count = usage_budgets.token_count + EXCLUDED.token_count,
+                                request_count = usage_budgets.request_count + EXCLUDED.request_count,
+                                updated_at = EXCLUDED.updated_at;
+                            """,
+                            (budget_id, user_id, date_str, tokens, requests, datetime.now(timezone.utc)),
+                        )
+                    conn.commit()
+            except Exception as exc:
+                logger.warning(f"PostgreSQL record_token_usage failed: {exc}")
+
+    def get_daily_token_usage(self, user_id: str, date_str: Optional[str] = None) -> int:
+        """Queries daily token count for user from usage_budgets."""
+        target_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        pool = get_db_pool()
+        if pool:
+            try:
+                with pool.connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT token_count FROM usage_budgets WHERE user_id = %s AND date_str = %s;",
+                            (user_id, target_date),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            return int(row["token_count"])
+            except Exception as exc:
+                logger.warning(f"PostgreSQL get_daily_token_usage failed: {exc}")
+        return 0
 
     def _seed_initial_data(self):
         """Seeds default accounts in development and test environments only."""

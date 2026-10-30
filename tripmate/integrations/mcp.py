@@ -12,6 +12,7 @@ from mcp_client import (
     weather_mcp_search as raw_weather_mcp_search,
     forecast_mcp_search as raw_forecast_mcp_search,
     extract_destination as raw_extract_destination,
+    mcp_manager,
 )
 from tripmate.integrations.circuit_breaker import (
     CircuitBreaker,
@@ -117,6 +118,11 @@ async def safe_aviation_call(
             ttl_seconds=settings.MCP_CACHE_TTL_SECONDS,
         )
     except (CircuitBreakerOpenException, asyncio.TimeoutError, Exception) as exc:
+        if not isinstance(exc, (CircuitBreakerOpenException, asyncio.TimeoutError)):
+            try:
+                await mcp_manager.handle_tool_crash("aviationstack", exc)
+            except Exception:
+                pass
         logger.warning(f"Resilient AviationStack call fallback used: {exc}")
         return f"Live flight status data unavailable: {exc}"
 
@@ -150,6 +156,11 @@ async def safe_weather_search(city: str, user_id: Optional[str] = None) -> str:
             ttl_seconds=settings.MCP_CACHE_TTL_SECONDS,
         )
     except (CircuitBreakerOpenException, asyncio.TimeoutError, Exception) as exc:
+        if not isinstance(exc, (CircuitBreakerOpenException, asyncio.TimeoutError)):
+            try:
+                await mcp_manager.handle_tool_crash("weather", exc)
+            except Exception:
+                pass
         logger.warning(f"Resilient Weather Search fallback used: {exc}")
         return f"Live weather forecast for {city} is unavailable. Providing general seasonal advice."
 

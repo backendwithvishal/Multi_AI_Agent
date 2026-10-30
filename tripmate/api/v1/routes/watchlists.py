@@ -8,6 +8,7 @@ Endpoints:
 - DELETE /api/v1/watchlists/{watchlist_id}: Remove item from watchlist
 """
 
+import asyncio
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from tripmate.schemas import APIResponse, WatchlistCreateRequest, WatchlistItem
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/watchlists", tags=["Travel Watchlists"])
 )
 async def list_watchlists(request: Request, current_user: Dict[str, Any] = Depends(get_current_user)):
     request_id = getattr(request.state, "request_id", "req_wl")
-    items = watchlist_service.list_items(current_user["id"])
+    items = await asyncio.to_thread(watchlist_service.list_items, current_user["id"])
     return APIResponse(
         success=True,
         data=items,
@@ -46,7 +47,7 @@ async def create_watchlist(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_wl")
-    item = watchlist_service.add_item(current_user["id"], req)
+    item = await asyncio.to_thread(watchlist_service.add_item, current_user["id"], req)
     return APIResponse(
         success=True,
         data=item,
@@ -67,7 +68,7 @@ async def get_watchlist(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_wl")
-    item = watchlist_service.get_item(watchlist_id, current_user["id"])
+    item = await asyncio.to_thread(watchlist_service.get_item, watchlist_id, current_user["id"])
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -93,7 +94,7 @@ async def delete_watchlist(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_wl")
-    deleted = watchlist_service.delete_item(watchlist_id, current_user["id"])
+    deleted = await asyncio.to_thread(watchlist_service.delete_item, watchlist_id, current_user["id"])
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

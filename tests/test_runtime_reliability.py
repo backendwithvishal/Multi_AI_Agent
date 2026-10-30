@@ -48,12 +48,18 @@ async def test_streaming_event_order(auth_headers):
                 if line.startswith("event: "):
                     event_names.append(line.replace("event: ", "").strip())
 
-        # Assert correct chronological progression
-        assert "workflow.started" in event_names
-        assert "supervisor.completed" in event_names
-        assert "specialists.completed" in event_names
-        # First event must be workflow.started
+        # Assert heartbeat comment frames are received
+        assert ": heartbeat" in resp.text
+
+        # Assert correct chronological progression and all required event types
         assert event_names[0] == "workflow.started"
+        assert "supervisor.decision" in event_names
+        assert "step.update" in event_names
+        assert "agent.started" in event_names
+        assert "agent.finished" in event_names
+        assert "hitl_required" in event_names
+        assert "final_result" in event_names
+        assert "workflow.completed" in event_names
 
 
 @pytest.mark.asyncio
@@ -188,3 +194,58 @@ async def test_approval_ttl_expiry(auth_headers):
         )
         assert approve_resp.status_code == 410
         assert approve_resp.json()["error"]["code"] == "APPROVAL_EXPIRED"
+
+
+@pytest.mark.asyncio
+async def test_cache_user_isolation():
+    """Verifies that MCP cache strictly namespaces by user and never leaks across users."""
+    key = f"iso_test_{int(time.time()*1000)}"
+    val_u1 = {"secret": "user1_itinerary_data"}
+    val_u2 = {"secret": "user2_itinerary_data"}
+
+    # User 1 caches data
+    ok1 = await hybrid_cache.set_mcp("travel", key, val_u1, user_id="user_alpha")
+    assert ok1 is True
+
+    # User 2 caches data with same key
+    ok2 = await hybrid_cache.set_mcp("travel", key, val_u2, user_id="user_beta")
+    assert ok2 is True
+
+    # User 1 gets their data
+    res_u1 = await hybrid_cache.get_mcp("travel", key, user_id="user_alpha")
+    assert res_u1 == val_u1
+
+    # User 2 gets their data
+    res_u2 = await hybrid_cache.get_mcp("travel", key, user_id="user_beta")
+    assert res_u2 == val_u2
+
+    # Anonymous / public lookup gets None
+    res_anon = await hybrid_cache.get_mcp("travel", key, user_id=None)
+    assert res_anon is None
+
+
+@pytest.mark.asyncio
+async def test_cache_size_limit():
+    """Verifies that payloads exceeding MCP_CACHE_MAX_BYTES (64KB) are rejected."""
+    key = f"size_test_{int(time.time()*1000)}"
+    oversized_data = "X" * (settings.MCP_CACHE_MAX_BYTES + 1024)
+
+    # Attempt to cache oversized payload
+    stored = await hybrid_cache.set_mcp("travel", key, oversized_data, user_id="user_test")
+    assert stored is False
+
+    # Lookup returns None
+    result = await hybrid_cache.get_mcp("travel", key, user_id="user_test")
+    assert result is None
+
+
+def test_postgres_required_in_prod(monkeypatch):
+    """Verifies that non-dev / production environments fail startup if PostgresSaver fails."""
+    monkeypatch.setattr(settings, "ENV", "production")
+    monkeypatch.setattr(settings, "DATABASE_URL", "postgresql://invalid_user:invalid_pass@localhost:9999/invalid_db")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        initialize_checkpointer()
+    assert "PostgreSQL checkpointer" in str(exc_info.value)
+    assert "Production/Non-dev startup failed" in str(exc_info.value)
+

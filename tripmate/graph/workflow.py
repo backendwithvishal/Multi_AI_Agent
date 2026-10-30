@@ -12,7 +12,7 @@ This file constructs the complete dynamic multi-agent execution graph:
 
 import asyncio
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
 from langchain_core.messages import AIMessage
@@ -86,6 +86,20 @@ async def guardrail_blocked_node(state: TravelState):
     }
 
 
+from langchain_core.callbacks.manager import adispatch_custom_event
+
+async def _run_agent_with_events(agent_name: str, agent_obj: Any, llm: Any, query: str, context: Optional[Dict[str, Any]] = None):
+    await adispatch_custom_event("agent_started", {"agent": agent_name})
+    try:
+        res = await agent_obj.run(llm, query, context=context)
+        status_val = getattr(res, "status", "success")
+        await adispatch_custom_event("agent_finished", {"agent": agent_name, "status": status_val})
+        return res
+    except Exception as exc:
+        await adispatch_custom_event("agent_finished", {"agent": agent_name, "status": "degraded", "error": str(exc)})
+        raise
+
+
 async def parallel_specialists_node(state: TravelState):
     t0 = time.time()
     selected = state.get("selected_agents", [])
@@ -100,17 +114,17 @@ async def parallel_specialists_node(state: TravelState):
     agent_instances = []
 
     if "flight_agent" in selected:
-        tasks.append(flight_agent_obj.run(reasoning_llm, query, context=agent_context))
+        tasks.append(_run_agent_with_events("flight_agent", flight_agent_obj, reasoning_llm, query, context=agent_context))
         task_keys.append("flight_results")
         agent_instances.append("flight_agent")
 
     if "hotel_agent" in selected:
-        tasks.append(hotel_agent_obj.run(reasoning_llm, query, context=agent_context))
+        tasks.append(_run_agent_with_events("hotel_agent", hotel_agent_obj, reasoning_llm, query, context=agent_context))
         task_keys.append("hotel_results")
         agent_instances.append("hotel_agent")
 
     if "weather_agent" in selected:
-        tasks.append(weather_agent_obj.run(reasoning_llm, query, context=agent_context))
+        tasks.append(_run_agent_with_events("weather_agent", weather_agent_obj, reasoning_llm, query, context=agent_context))
         task_keys.append("weather_results")
         agent_instances.append("weather_agent")
 
@@ -139,7 +153,9 @@ async def parallel_specialists_node(state: TravelState):
 
     if "budget_agent" in selected:
         constraints = state.get("trip_constraints", {})
-        budget_output = await budget_agent_obj.run(
+        budget_output = await _run_agent_with_events(
+            "budget_agent",
+            budget_agent_obj,
             reasoning_llm,
             query,
             context={

@@ -370,6 +370,7 @@ Multi_AI_Agent/
 │   ├── test_platform_upgrades.py  # Cache, task queue & rate limiting tests
 │   ├── test_resilience.py         # Circuit breaker resilience tests
 │   ├── test_roadmap_features.py   # GDS, Alembic & Prometheus tests
+│   ├── test_runtime_reliability.py # Real SSE streaming, checkpointer, HITL idempotency & resilience
 │   ├── test_security.py           # Guardrail, injection & PII redaction tests
 │   ├── test_settings.py           # Configuration validation tests
 │   ├── test_streaming_and_middleware.py # SSE streaming & middleware tests

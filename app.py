@@ -90,11 +90,20 @@ async def lifespan(app: FastAPI):
     yield
     # Graceful shutdown hooks
     try:
+        # Finish or cancel in-flight active workflow runs
+        from tripmate.services.travel_service import ACTIVE_RUNS
+        for task in list(ACTIVE_RUNS):
+            if not task.done():
+                task.cancel()
+        if ACTIVE_RUNS:
+            await asyncio.gather(*[t for t in list(ACTIVE_RUNS) if not t.done()], return_exceptions=True)
+            ACTIVE_RUNS.clear()
+
         await task_queue.stop()
         from mcp_client import mcp_manager
         await mcp_manager.shutdown()
         await hybrid_cache.aclose()
-        from tripmate.database import close_checkpointer
+        from tripmate.database import close_checkpointer, close_db_pools
         close_checkpointer()
         close_db_pools()
     except Exception as exc:
@@ -144,9 +153,22 @@ app.add_middleware(
 )
 
 
-# =========================================================
-# Centralized Exception Handlers (Standardized APIResponse)
-# =========================================================
+from tripmate.core.errors import AppException
+
+
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=APIResponse(
+            success=False,
+            data=None,
+            error=ErrorDetail(code=exc.code.value, message=exc.message, details=exc.details),
+            request_id=request_id,
+        ).model_dump(),
+    )
+
 
 @app.exception_handler(FastAPIHTTPException)
 @app.exception_handler(StarletteHTTPException)

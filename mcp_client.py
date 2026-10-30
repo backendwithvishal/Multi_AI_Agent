@@ -109,12 +109,18 @@ def create_mcp_client() -> MultiServerMCPClient:
     )
 
 
+from contextlib import AsyncExitStack
+from langchain_mcp_adapters.tools import load_mcp_tools
+
+
 class MCPManager:
     """Manages persistent MCP server connections and lifecycle without re-spawning per request."""
 
     def __init__(self):
         self._client: Optional[MultiServerMCPClient] = None
         self._tools: Dict[Tuple[str, str], Any] = {}
+        self._sessions: Dict[str, Any] = {}
+        self._exit_stack: Optional[AsyncExitStack] = None
         self._lock = asyncio.Lock()
         self._failures: Dict[str, int] = {}
         self._last_failure_time: Dict[str, float] = {}
@@ -123,6 +129,11 @@ class MCPManager:
         if self._client is None:
             self._client = create_mcp_client()
         return self._client
+
+    def _get_stack(self) -> AsyncExitStack:
+        if self._exit_stack is None:
+            self._exit_stack = AsyncExitStack()
+        return self._exit_stack
 
     async def get_tool(self, server_name: str, tool_name: str):
         key = (server_name, tool_name)
@@ -155,8 +166,18 @@ class MCPManager:
                 _require_env("OPENWEATHER_API_KEY", os.getenv("OPENWEATHER_API_KEY"))
 
             client = self.get_client()
+            stack = self._get_stack()
+
             try:
-                tools = await client.get_tools(server_name=server_name)
+                # Open or reuse persistent session for stdio / HTTP transport
+                if server_name not in self._sessions:
+                    session = await stack.enter_async_context(client.session(server_name))
+                    self._sessions[server_name] = session
+                else:
+                    session = self._sessions[server_name]
+
+                # Load tools bound to the persistent session (never spawning per tool call)
+                tools = await load_mcp_tools(session, server_name=server_name)
                 for t in tools:
                     self._tools[(server_name, t.name)] = t
                 self._failures[server_name] = 0
@@ -164,9 +185,13 @@ class MCPManager:
                 self._failures[server_name] = fail_count + 1
                 self._last_failure_time[server_name] = now
                 logger.warning(
-                    f"[MCPManager] Failed to load tools from '{server_name}': {exc}. Failure count: {self._failures[server_name]}"
+                    f"[MCPManager] Failed to establish persistent session for '{server_name}': {exc}. Failure count: {self._failures[server_name]}"
                 )
-                self._client = None
+                # Reset dead session reference to allow restart on backoff recovery
+                self._sessions.pop(server_name, None)
+                keys_to_remove = [k for k in self._tools if k[0] == server_name]
+                for k in keys_to_remove:
+                    self._tools.pop(k, None)
                 raise
 
             tool = self._tools.get(key)
@@ -177,17 +202,38 @@ class MCPManager:
                 )
             return tool
 
+    async def handle_tool_crash(self, server_name: str, error: Exception):
+        """Notifies MCPManager of an invocation crash to recycle session with backoff."""
+        async with self._lock:
+            fail_count = self._failures.get(server_name, 0) + 1
+            self._failures[server_name] = fail_count
+            self._last_failure_time[server_name] = time.time()
+            self._sessions.pop(server_name, None)
+            keys_to_remove = [k for k in self._tools if k[0] == server_name]
+            for k in keys_to_remove:
+                self._tools.pop(k, None)
+            logger.warning(f"[MCPManager] Session for '{server_name}' recycled after crash: {error}. Failure count: {fail_count}")
+
     async def startup(self):
-        """Initializes client and pre-warms connections."""
+        """Initializes client and pre-warms persistent connections during FastAPI lifespan."""
         async with self._lock:
             if self._client is None:
                 self._client = create_mcp_client()
-            logger.info("[MCPManager] MCP Client Manager started.")
+            if self._exit_stack is None:
+                self._exit_stack = AsyncExitStack()
+            logger.info("[MCPManager] MCP Client Manager started with persistent lifecycle.")
 
     async def shutdown(self):
-        """Cleanly releases MCP subprocesses and clears tool references."""
+        """Cleanly terminates persistent MCP sessions and stdio child processes on FastAPI shutdown."""
         async with self._lock:
             self._tools.clear()
+            self._sessions.clear()
+            if self._exit_stack is not None:
+                try:
+                    await self._exit_stack.aclose()
+                except Exception as exc:
+                    logger.warning(f"[MCPManager] Error closing persistent MCP sessions: {exc}")
+                self._exit_stack = None
             self._client = None
             logger.info("[MCPManager] MCP Client Manager stopped cleanly.")
 
