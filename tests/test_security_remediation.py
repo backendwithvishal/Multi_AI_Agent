@@ -42,29 +42,31 @@ async def test_authentication_required_on_all_travel_routes(monkeypatch):
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Legacy endpoints
-        resp1 = await client.post("/api/travel", json={"message": "Visit Tokyo"})
+        resp1 = await client.post("/api/travel", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.1"})
         assert resp1.status_code == 401
         assert resp1.json()["error"]["code"] == "UNAUTHORIZED"
 
-        resp2 = await client.post("/api/travel/stream", json={"message": "Visit Tokyo"})
+        resp2 = await client.post("/api/travel/stream", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.2"})
         assert resp2.status_code == 401
 
         resp3 = await client.post(
             "/api/travel/approve",
             json={"thread_id": "thread_valid_123", "approved": True, "feedback": ""},
+            headers={"X-Forwarded-For": "10.10.1.3"},
         )
         assert resp3.status_code == 401
 
         # V1 endpoints
-        resp4 = await client.post("/api/v1/travel", json={"message": "Visit Tokyo"})
+        resp4 = await client.post("/api/v1/travel", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.4"})
         assert resp4.status_code == 401
 
-        resp5 = await client.post("/api/v1/travel/stream", json={"message": "Visit Tokyo"})
+        resp5 = await client.post("/api/v1/travel/stream", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.5"})
         assert resp5.status_code == 401
 
         resp6 = await client.post(
             "/api/v1/travel/approve",
             json={"thread_id": "thread_valid_123", "approved": True, "feedback": ""},
+            headers={"X-Forwarded-For": "10.10.1.6"},
         )
         assert resp6.status_code == 401
 
