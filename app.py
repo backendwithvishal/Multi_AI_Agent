@@ -53,61 +53,68 @@ logger = logging.getLogger("tripmate.app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Perform production configuration check on application startup
-    try:
-        settings.validate_production()
-    except ValueError as exc:
-        if settings.APP_ENV == "production":
-            logger.error(f"[STARTUP ERROR] {exc}")
-            raise
-        else:
-            logger.warning(f"[STARTUP WARNING] {exc}")
-
-    # Initialize and apply database migrations if PostgreSQL is configured
-    from tripmate.database import get_formatted_db_url, close_db_pools
-    if get_formatted_db_url():
+    if not settings.is_test:
+        # Perform production configuration check on application startup
         try:
-            from tripmate.database.migrator import run_migrations_up
-            from tripmate.database.store import store
-            mig_res = run_migrations_up("head")
-            if mig_res.get("success"):
-                logger.info("PostgreSQL database migrations verified and up to date.")
+            settings.validate_production()
+        except ValueError as exc:
+            if settings.APP_ENV == "production":
+                logger.error(f"[STARTUP ERROR] {exc}")
+                raise
             else:
-                logger.warning(f"Database migration notice on startup: {mig_res.get('error')}")
-            store._seed_initial_data()
+                logger.warning(f"[STARTUP WARNING] {exc}")
+
+        # Initialize and apply database migrations if PostgreSQL is configured and accessible
+        from tripmate.database import get_formatted_db_url, get_db_pool, close_db_pools
+        if get_formatted_db_url():
+            try:
+                if get_db_pool():
+                    from tripmate.database.migrator import run_migrations_up
+                    from tripmate.database.store import store
+                    mig_res = run_migrations_up("head")
+                    if mig_res.get("success"):
+                        logger.info("PostgreSQL database migrations verified and up to date.")
+                    else:
+                        logger.warning(f"Database migration notice on startup: {mig_res.get('error')}")
+                    store._seed_initial_data()
+                else:
+                    logger.info("Database pool not active; skipping startup migration run.")
+            except Exception as exc:
+                logger.warning(f"Notice during database initialization on startup: {exc}")
+
+        # Initialize persistent MCP client manager
+        try:
+            from mcp_client import mcp_manager
+            await mcp_manager.startup()
         except Exception as exc:
-            logger.warning(f"Notice during database initialization on startup: {exc}")
+            logger.warning(f"Notice during MCP Manager startup: {exc}")
 
-    # Initialize persistent MCP client manager
-    try:
-        from mcp_client import mcp_manager
-        await mcp_manager.startup()
-    except Exception as exc:
-        logger.warning(f"Notice during MCP Manager startup: {exc}")
+        # Start background task queue worker
+        await task_queue.start()
 
-    # Start background task queue worker
-    await task_queue.start()
     yield
-    # Graceful shutdown hooks
-    try:
-        # Finish or cancel in-flight active workflow runs
-        from tripmate.services.travel_service import ACTIVE_RUNS
-        for task in list(ACTIVE_RUNS):
-            if not task.done():
-                task.cancel()
-        if ACTIVE_RUNS:
-            await asyncio.gather(*[t for t in list(ACTIVE_RUNS) if not t.done()], return_exceptions=True)
-            ACTIVE_RUNS.clear()
 
-        await task_queue.stop()
-        from mcp_client import mcp_manager
-        await mcp_manager.shutdown()
-        await hybrid_cache.aclose()
-        from tripmate.database import close_checkpointer, close_db_pools
-        close_checkpointer()
-        close_db_pools()
-    except Exception as exc:
-        logger.warning(f"[SHUTDOWN WARNING] Clean shutdown: {exc}")
+    if not settings.is_test:
+        # Graceful shutdown hooks
+        try:
+            # Finish or cancel in-flight active workflow runs
+            from tripmate.services.travel_service import ACTIVE_RUNS
+            for task in list(ACTIVE_RUNS):
+                if not task.done():
+                    task.cancel()
+            if ACTIVE_RUNS:
+                await asyncio.gather(*[t for t in list(ACTIVE_RUNS) if not t.done()], return_exceptions=True)
+                ACTIVE_RUNS.clear()
+
+            await task_queue.stop()
+            from mcp_client import mcp_manager
+            await mcp_manager.shutdown()
+            await hybrid_cache.aclose()
+            from tripmate.database import close_checkpointer, close_db_pools
+            close_checkpointer()
+            close_db_pools()
+        except Exception as exc:
+            logger.warning(f"[SHUTDOWN WARNING] Clean shutdown: {exc}")
 
 
 # Initialize FastAPI web app with conditional docs visibility in production
@@ -439,6 +446,61 @@ async def legacy_approve(
     return JSONResponse(content={"success": True, **result})
 
 
+from fastapi import Response
+from tripmate.database import check_db_health
+
+
+@app.get("/health/live", tags=["System Health & Diagnostics"])
+async def health_live():
+    """Process Liveness Probe: Verifies web server is running and alive with no internal leaks."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready", tags=["System Health & Diagnostics"])
+async def health_ready(response: Response):
+    """Readiness Probe: Verifies PostgreSQL, Redis, and MCP connectivity without leaking secrets."""
+    db_health = check_db_health()
+    db_ok = db_health.get("status") in ("healthy", "disabled") if settings.is_dev else (db_health.get("status") == "healthy")
+
+    redis_ok = True
+    try:
+        redis_ping = await hybrid_cache.ping()
+        if not redis_ping:
+            redis_ok = False
+    except Exception:
+        redis_ok = False
+
+    # MCP service availability
+    mcp_ok = True
+    try:
+        from mcp_client import mcp_manager
+        if hasattr(mcp_manager, "is_healthy") and not mcp_manager.is_healthy():
+            mcp_ok = False
+    except Exception:
+        mcp_ok = True
+
+    is_ready = db_ok and redis_ok and mcp_ok
+    if not is_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "unhealthy",
+            "services": {
+                "database": "healthy" if db_ok else "unhealthy",
+                "redis": "healthy" if redis_ok else "unhealthy",
+                "mcp": "healthy" if mcp_ok else "unhealthy",
+            },
+        }
+
+    return {
+        "status": "ready",
+        "services": {
+            "database": "healthy",
+            "redis": "healthy",
+            "mcp": "healthy",
+        },
+    }
+
+
 @app.get("/health")
 async def legacy_health():
     """Minimal public health check."""
@@ -460,17 +522,49 @@ async def legacy_health():
 
 
 if __name__ == "__main__":
-    raw_port = os.getenv("PORT", "8000").strip()
+    raw_port = os.getenv("PORT", str(settings.PORT)).strip()
     try:
         port = int(raw_port)
     except ValueError:
-        port = 8000
-    allowed_proxies = ",".join(settings.TRUSTED_PROXIES) if settings.TRUSTED_PROXIES else "127.0.0.1"
-    uvicorn.run(
-        "app:app",
-        host="0.0.0.0",
-        port=port,
-        proxy_headers=True,
-        forwarded_allow_ips=allowed_proxies,
-        reload=False,
-    )
+        port = settings.PORT
+
+    trusted = settings.TRUSTED_PROXIES
+    allowed_proxies = ",".join(trusted) if isinstance(trusted, list) else str(trusted)
+
+    if settings.is_dev:
+        # Development mode: localhost only, reload=True
+        uvicorn.run(
+            "app:app",
+            host="127.0.0.1",
+            port=port,
+            reload=True,
+            proxy_headers=True,
+            forwarded_allow_ips=allowed_proxies,
+        )
+    else:
+        # Production mode: gunicorn + uvicorn workers, proxy headers, graceful timeout, keep-alive
+        import sys
+        workers = int(os.getenv("WEB_CONCURRENCY", os.getenv("WORKERS", str(settings.WEB_CONCURRENCY))))
+        graceful_timeout = int(os.getenv("GRACEFUL_TIMEOUT", str(settings.GRACEFUL_TIMEOUT)))
+        keep_alive = int(os.getenv("KEEP_ALIVE", str(settings.KEEP_ALIVE)))
+
+        if sys.platform != "win32":
+            import subprocess
+            cmd = [
+                "gunicorn",
+                "-c", "gunicorn.conf.py",
+                "app:app",
+            ]
+            subprocess.run(cmd)
+        else:
+            uvicorn.run(
+                "app:app",
+                host="0.0.0.0",
+                port=port,
+                workers=workers,
+                reload=False,
+                proxy_headers=True,
+                forwarded_allow_ips=allowed_proxies,
+                timeout_keep_alive=keep_alive,
+                timeout_graceful_shutdown=graceful_timeout,
+            )

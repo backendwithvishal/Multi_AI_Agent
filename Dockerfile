@@ -1,52 +1,75 @@
-FROM python:3.11-slim AS builder
+# ==============================================================================
+# Multi-stage Dockerfile for TripMate AI Production Service
+# Stage 1: Build & Dependency Resolution Stage
+# ==============================================================================
+FROM python:3.11.11-slim-bookworm@sha256:4a02be04907a72d7318ec7e8284563b782deaeaf43ab6a84f3e6f9e8a75e3c79 AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PIP_NO_CACHE_DIR=1
-ENV PIP_DISABLE_PIP_VERSION_CHECK=1
-ENV PIP_ROOT_USER_ACTION=ignore
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
-    git \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# Copy uv & uvx binaries from pinned official image
+COPY --from=ghcr.io/astral-sh/uv:0.5.29@sha256:1a82f05a9601d51a6572eb0f994f87a80b188c6bbd8be6a72e811f5d233c46e3 /uv /uvx /usr/local/bin/
 
-RUN pip install --upgrade pip
-RUN pip install --prefix=/install -r requirements.txt
+# Install python dependencies strictly from hashed lockfile into isolated prefix
+COPY requirements.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock --prefix=/install
 
-FROM python:3.11-slim AS runner
+# Pre-cache AviationStack MCP tool at build time so runtime requires zero internet downloads
+ENV UV_TOOL_DIR=/install/share/uv/tools \
+    UV_TOOL_BIN_DIR=/install/bin
+RUN uv tool install --no-cache aviationstack-mcp
+
+# ==============================================================================
+# Stage 2: Minimal Hardened Production Runtime (No compiler, No git, No curl)
+# ==============================================================================
+FROM python:3.11.11-slim-bookworm@sha256:4a02be04907a72d7318ec7e8284563b782deaeaf43ab6a84f3e6f9e8a75e3c79 AS runner
 
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PATH="/usr/local/bin:${PATH}"
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/usr/local/bin:${PATH}" \
+    UV_TOOL_DIR=/home/appuser/.local/share/uv/tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin
 
+# Install runtime utilities: tini for PID 1 signal reaping, libpq5 for PostgreSQL
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    git \
+    tini \
+    libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv/uvx toolchain required by mcp_client.py for AviationStack MCP
-RUN curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
+# Copy uv/uvx binaries from pinned official image
+COPY --from=ghcr.io/astral-sh/uv:0.5.29@sha256:1a82f05a9601d51a6572eb0f994f87a80b188c6bbd8be6a72e811f5d233c46e3 /uv /uvx /usr/local/bin/
 
+# Copy python dependencies and cached tools from builder
 COPY --from=builder /install /usr/local
 
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Create non-root system user and prepare home directory for pre-cached uv tools
+RUN groupadd -g 10001 appgroup && \
+    useradd -u 10001 -g appgroup -m -s /bin/bash appuser && \
+    mkdir -p /home/appuser/.local/share/uv/tools && \
+    cp -r /usr/local/share/uv/tools/* /home/appuser/.local/share/uv/tools/ 2>/dev/null || true && \
+    chown -R appuser:appgroup /home/appuser /app
 
-COPY --chown=appuser:appuser . /app
+# Copy application source code
+COPY --chown=appuser:appgroup . /app
 
 USER appuser
 
 EXPOSE 8000
 
+# Healthcheck probing /health/live with Python stdlib (no curl required)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+  CMD python -c "import urllib.request, os; port = os.environ.get('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/health/live')"
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]
-
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]

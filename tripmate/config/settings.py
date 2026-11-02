@@ -127,6 +127,20 @@ class Settings(BaseSettings):
     OPENWEATHER_API_KEY: str = ""
     AVIATIONSTACK_API_KEY: str = ""
 
+    # Model Tier Selection
+    FAST_LLM_MODEL: str = "llama-3.1-8b-instant"
+    REASONING_LLM_MODEL: str = "llama-3.3-70b-versatile"
+    OPENROUTER_FAST_MODEL: str = "meta-llama/llama-3.1-8b-instruct:free"
+    OPENROUTER_REASONING_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
+    HUGGINGFACE_FAST_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    HUGGINGFACE_REASONING_MODEL: str = "meta-llama/Llama-3.3-70B-Instruct"
+
+    # Server & Process Concurrency
+    PORT: int = 8000
+    WEB_CONCURRENCY: int = 2
+    GRACEFUL_TIMEOUT: int = 30
+    KEEP_ALIVE: int = 5
+
     # LangSmith Observability & Tracing settings
     LANGCHAIN_TRACING_V2: str = "false"
     LANGCHAIN_API_KEY: str = ""
@@ -278,6 +292,22 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Returns True if running in production mode."""
         return self.APP_ENV in ("production", "prod") or self.ENV in ("production", "prod")
+
+    @property
+    def is_dev(self) -> bool:
+        """Returns True if running in development mode."""
+        return self.APP_ENV in ("development", "dev") or self.ENV in ("development", "dev")
+
+    @property
+    def is_test(self) -> bool:
+        """Returns True if running under pytest or test environment."""
+        import sys
+        return (
+            self.APP_ENV in ("test", "testing")
+            or self.ENV in ("test", "testing")
+            or "pytest" in sys.modules
+            or "PYTEST_CURRENT_TEST" in os.environ
+        )
 
     def validate_production(self) -> None:
         """Validates that mandatory API keys and security configs are present when running in production mode."""

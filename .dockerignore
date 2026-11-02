@@ -33,9 +33,14 @@ htmlcov/
 *.swp
 *.swo
 
-# Project logs and scratch files
+# Project logs, temporary files, and scratch directories
 *.log
 scratch/
 brain.md
 evaluation/
 tests/
+docs/
+scripts/
+docker-compose*.yml
+Dockerfile*
+README.md

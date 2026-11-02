@@ -1,41 +1,65 @@
+# ==============================================================================
+# TripMate AI — Development Docker Compose
+# ==============================================================================
 services:
-  api:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: tripmate_api
+    container_name: tripmate_app_dev
     restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /run:rw,noexec,nosuid,size=16m
+      - /home/appuser/.cache:rw,noexec,nosuid,size=64m
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
       - APP_ENV=development
-      - LOG_LEVEL=INFO
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
-      - AVIATIONSTACK_API_KEY=${AVIATIONSTACK_API_KEY}
-      - DATABASE_URL=postgresql://postgres:postgres_pass@postgres_db:5432/tripmate_db
-      - REDIS_URL=redis://redis_cache:6379/0
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Required POSTGRES_PASSWORD}@postgres:5432/tripmate_db
+      - REDIS_URL=redis://redis:6379/0
+      - TRUSTED_PROXIES=127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
     depends_on:
-      postgres_db:
+      postgres:
         condition: service_healthy
-      redis_cache:
+      redis:
         condition: service_healthy
+    networks:
+      - tripmate_network
 
-  postgres_db:
-    image: postgres:15-bookworm
-    container_name: tripmate_postgres
+  postgres:
+    image: postgres:15.8-bookworm
+    container_name: tripmate_postgres_dev
     restart: unless-stopped
-    ports:
-      - "5432:5432"
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres_pass
-      - POSTGRES_DB=tripmate_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Required POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-tripmate_db}
       - LANG=C
       - LC_ALL=C
       - POSTGRES_INITDB_ARGS=--locale=C --encoding=UTF-8 --auth-local=scram-sha-256 --auth-host=scram-sha-256
@@ -43,18 +67,32 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tripmate_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tripmate_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1024M
+    networks:
+      - tripmate_network
 
-  redis_cache:
-    image: redis:7-alpine
-    container_name: tripmate_redis
+  redis:
+    image: redis:7.2.5-alpine
+    container_name: tripmate_redis_dev
     restart: unless-stopped
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", "900", "1"]
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -62,6 +100,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    networks:
+      - tripmate_network
+
+networks:
+  tripmate_network:
+    driver: bridge
 
 volumes:
   postgres_data:

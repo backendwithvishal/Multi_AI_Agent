@@ -185,7 +185,7 @@ def close_db_pools():
         except Exception:
             pass
         _db_pool = None
-    _db_pool_init_attempted = False
+        _db_pool_init_attempted = False
 
     if checkpointer_pool is not None:
         try:

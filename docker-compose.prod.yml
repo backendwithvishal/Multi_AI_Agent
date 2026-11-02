@@ -1,13 +1,23 @@
-# TripMate AI — Production Docker Compose
+# ==============================================================================
+# TripMate AI — Production Hardened Docker Compose
 # Usage: docker compose -f docker-compose.prod.yml up -d --build
-
+# ==============================================================================
 services:
-  api:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: tripmate_api_prod
+    container_name: tripmate_app_prod
     restart: always
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+      - /run:rw,noexec,nosuid,size=32m
+      - /home/appuser/.cache:rw,noexec,nosuid,size=128m
     ports:
       - "8000:8000"
     env_file:
@@ -15,24 +25,42 @@ services:
     environment:
       - APP_ENV=production
       - LOG_LEVEL=INFO
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_pass}@postgres_db:5432/tripmate_db
-      - REDIS_URL=redis://redis_cache:6379/0
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?Required POSTGRES_PASSWORD}@postgres:5432/tripmate_db
+      - REDIS_URL=redis://redis:6379/0
+      - TRUSTED_PROXIES=127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4096M
+        reservations:
+          cpus: "1.0"
+          memory: 1024M
     depends_on:
-      postgres_db:
+      postgres:
         condition: service_healthy
-      redis_cache:
+      redis:
         condition: service_healthy
     networks:
-      - tripmate_internal
+      - tripmate_network
 
-  postgres_db:
-    image: postgres:15-bookworm
+  postgres:
+    image: postgres:15.8-bookworm
     container_name: tripmate_postgres_prod
     restart: always
-    # Ports NOT exposed to host in production; accessible only via internal network
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_pass}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Required POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-tripmate_db}
       - LANG=C
       - LC_ALL=C
@@ -42,30 +70,48 @@ services:
       - postgres_data_prod:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-tripmate_db}"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
     networks:
-      - tripmate_internal
+      - tripmate_network
 
-  redis_cache:
-    image: redis:7-alpine
+  redis:
+    image: redis:7.2.5-alpine
     container_name: tripmate_redis_prod
     restart: always
-    # Ports NOT exposed to host in production; accessible only via internal network
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru", "--save", "900", "1"]
     volumes:
       - redis_data_prod:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 3s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
     networks:
-      - tripmate_internal
+      - tripmate_network
 
 networks:
-  tripmate_internal:
+  tripmate_network:
     driver: bridge
 
 volumes:

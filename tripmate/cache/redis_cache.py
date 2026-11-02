@@ -210,11 +210,11 @@ class RedisHybridCache:
         if self._use_redis and self._redis_client:
             try:
                 if hasattr(self._redis_client, "aclose"):
-                    await self._redis_client.aclose()
+                    await asyncio.wait_for(self._redis_client.aclose(), timeout=1.0)
                 elif hasattr(self._redis_client, "close"):
                     res = self._redis_client.close()
                     if inspect.isawaitable(res):
-                        await res
+                        await asyncio.wait_for(res, timeout=1.0)
             except Exception:
                 pass
 
@@ -231,7 +231,7 @@ class RedisHybridCache:
         """Pings Redis backend or returns False if in-memory fallback."""
         if self._use_redis and self._redis_client:
             try:
-                res = await self._redis_client.ping()
+                res = await asyncio.wait_for(self._redis_client.ping(), timeout=1.0)
                 return bool(res)
             except Exception:
                 return False

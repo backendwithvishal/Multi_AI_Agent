@@ -164,12 +164,20 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
         """Extracts client IP, honoring proxy headers ONLY when the peer is in TRUSTED_PROXIES."""
         peer_ip = request.client.host if request.client else "127.0.0.1"
         trusted = settings.TRUSTED_PROXIES
+        if isinstance(trusted, str):
+            trusted = [x.strip() for x in trusted.split(",") if x.strip()]
 
-        is_trusted = (
-            ("*" in trusted)
-            or (peer_ip in trusted)
-            or (peer_ip in ("127.0.0.1", "::1", "testclient"))
-        )
+        is_trusted = ("*" in trusted) or (peer_ip in trusted)
+        if not is_trusted:
+            try:
+                import ipaddress
+                peer_obj = ipaddress.ip_address(peer_ip)
+                for t in trusted:
+                    if "/" in t and peer_obj in ipaddress.ip_network(t, strict=False):
+                        is_trusted = True
+                        break
+            except Exception:
+                pass
 
         if is_trusted:
             forwarded_for = request.headers.get("X-Forwarded-For")

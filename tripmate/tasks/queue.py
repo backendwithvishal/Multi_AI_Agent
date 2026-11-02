@@ -51,8 +51,8 @@ class AsyncTaskQueue:
         if self._worker_loop_task:
             self._worker_loop_task.cancel()
             try:
-                await self._worker_loop_task
-            except asyncio.CancelledError:
+                await asyncio.wait_for(self._worker_loop_task, timeout=1.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                 pass
         
         # Cancel any active running task futures
