@@ -8,6 +8,16 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
+from tripmate.core.context import (
+    set_request_context,
+    get_request_id,
+    get_user_id,
+    get_thread_id,
+    hash_thread_id,
+)
+from tripmate.core.logging import redact_sensitive_data
+from tripmate.middleware.metrics import metrics_registry
+
 logger = logging.getLogger("tripmate.access")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -15,21 +25,36 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 class StructuredLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         t0 = time.time()
-        request_id = getattr(request.state, "request_id", "unknown")
+        request_id = getattr(request.state, "request_id", None) or get_request_id() or "unknown"
+        user_id = getattr(request.state, "user_id", None) or get_user_id()
+        raw_thread_id = getattr(request.state, "thread_id", None) or get_thread_id()
+        th_hash = hash_thread_id(raw_thread_id)
 
         response = await call_next(request)
         duration_ms = round((time.time() - t0) * 1000, 2)
 
+        if not user_id:
+            user_id = getattr(request.state, "user_id", None) or get_user_id()
+        if not th_hash:
+            th_hash = hash_thread_id(getattr(request.state, "thread_id", None) or get_thread_id())
+
         log_data = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "event": "http_request",
             "request_id": request_id,
+            "thread_id_hash": th_hash,
+            "user_id": user_id,
+            "route": request.url.path,
+            "status": response.status_code,
+            "latency": duration_ms,
+            "duration_ms": duration_ms,
             "method": request.method,
             "path": request.url.path,
             "status_code": response.status_code,
-            "duration_ms": duration_ms,
             "client_ip": request.client.host if request.client else "unknown",
         }
-        logger.info(json.dumps(log_data))
+        safe_log_data = redact_sensitive_data(log_data)
+        logger.info(json.dumps(safe_log_data, default=str))
         return response
 
 
@@ -37,6 +62,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = request.headers.get("X-Request-ID") or f"req_{uuid.uuid4().hex[:12]}"
         request.state.request_id = request_id
+        set_request_context(request_id)
 
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
@@ -298,6 +324,7 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
                 )
 
             if is_limited:
+                metrics_registry.record_rate_limit_rejection(path)
                 request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
                 return JSONResponse(
                     status_code=429,

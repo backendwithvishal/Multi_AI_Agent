@@ -20,6 +20,7 @@ from tripmate.integrations.circuit_breaker import (
     circuit_breaker_registry,
 )
 from tripmate.config.settings import settings
+from tripmate.core.context import get_request_id
 from tripmate.cache.redis_cache import hybrid_cache
 
 logger = logging.getLogger("tripmate.mcp")
@@ -67,14 +68,26 @@ def _cap_tool_response(output: Any) -> Any:
     return output
 
 
-async def safe_tavily_search(query: str, user_id: Optional[str] = None) -> str:
+async def safe_tavily_search(
+    query: str,
+    user_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+) -> str:
     """Safe Tavily Search with Redis caching, exponential backoff, timeout, and circuit breaker."""
+    req_id = request_id or get_request_id() or ""
+
     async def _fetch():
         async def _call():
-            return await asyncio.wait_for(
-                tavily_breaker.call(raw_tavily_mcp_search, query),
-                timeout=settings.EXTERNAL_API_TIMEOUT_SECONDS,
-            )
+            try:
+                return await asyncio.wait_for(
+                    tavily_breaker.call(raw_tavily_mcp_search, query, request_id=req_id),
+                    timeout=settings.EXTERNAL_API_TIMEOUT_SECONDS,
+                )
+            except TypeError:
+                return await asyncio.wait_for(
+                    tavily_breaker.call(raw_tavily_mcp_search, query),
+                    timeout=settings.EXTERNAL_API_TIMEOUT_SECONDS,
+                )
 
         raw_res = await execute_with_backoff_and_jitter(_call, max_retries=1)
         return str(_cap_tool_response(raw_res))
@@ -174,3 +187,10 @@ async def safe_extract_destination(query: str) -> str:
         )
     except Exception:
         return "Destination"
+
+
+# Aliases for consistent naming
+tavily_search = safe_tavily_search
+aviation_call = safe_aviation_call
+weather_search = safe_weather_search
+

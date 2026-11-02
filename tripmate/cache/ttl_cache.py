@@ -59,9 +59,19 @@ class BoundedAsyncTTLCache:
                 expires_at, val = self._store[cache_key]
                 if time.time() < expires_at:
                     self._hits += 1
+                    try:
+                        from tripmate.middleware.metrics import metrics_registry
+                        metrics_registry.record_cache_hit("memory")
+                    except Exception:
+                        pass
                     return val
                 del self._store[cache_key]
             self._misses += 1
+            try:
+                from tripmate.middleware.metrics import metrics_registry
+                metrics_registry.record_cache_miss("memory")
+            except Exception:
+                pass
             return None
 
     async def set(self, namespace: str, key_data: Any, value: Any, ttl_seconds: Optional[int] = None) -> None:

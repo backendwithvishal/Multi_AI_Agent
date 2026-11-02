@@ -16,6 +16,7 @@ from tripmate.schemas import APIResponse, AdminStatsResponse, UserRegisterReques
 from tripmate.services.admin_service import admin_service
 from tripmate.services.travel_service import RUN_STORE
 from tripmate.api.dependencies import require_admin
+from tripmate.core.audit import audit_logger, AuditEventType
 
 router = APIRouter(prefix="/admin", tags=["Platform Administration"])
 
@@ -74,6 +75,17 @@ async def create_user(
             password=req.password,
             role=req.role,
         )
+        client_ip = request.client.host if request.client else "unknown"
+        audit_logger.record(
+            event_type=AuditEventType.ADMIN_ACTION,
+            action="admin_create_user",
+            actor=admin_user.get("id", "admin"),
+            target_id=req.username,
+            status="success",
+            client_ip=client_ip,
+            request_id=request_id,
+            details={"role": req.role, "email": req.email},
+        )
         return APIResponse(
             success=True,
             data=token_data,
@@ -100,6 +112,17 @@ async def reset_circuit_breaker(
 ):
     request_id = getattr(request.state, "request_id", "req_adm")
     res = admin_service.reset_circuit_breaker(service_name)
+    client_ip = request.client.host if request.client else "unknown"
+    audit_logger.record(
+        event_type=AuditEventType.ADMIN_ACTION,
+        action="reset_circuit_breaker",
+        actor=admin_user.get("id", "admin"),
+        target_id=service_name,
+        status="success",
+        client_ip=client_ip,
+        request_id=request_id,
+        details={"result": res},
+    )
     return APIResponse(
         success=True,
         data=res,
@@ -117,6 +140,17 @@ async def reset_circuit_breaker(
 async def clear_cache(request: Request, admin_user: Dict[str, Any] = Depends(require_admin)):
     request_id = getattr(request.state, "request_id", "req_adm")
     res = await admin_service.clear_cache()
+    client_ip = request.client.host if request.client else "unknown"
+    audit_logger.record(
+        event_type=AuditEventType.ADMIN_ACTION,
+        action="clear_cache",
+        actor=admin_user.get("id", "admin"),
+        target_id="cache",
+        status="success",
+        client_ip=client_ip,
+        request_id=request_id,
+        details={"result": res},
+    )
     return APIResponse(
         success=True,
         data=res,

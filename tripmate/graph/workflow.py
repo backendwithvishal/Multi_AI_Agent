@@ -32,6 +32,8 @@ from tripmate.agents.specialists import (
 )
 from tripmate.services.model_router import model_router, ModelTier
 from tripmate.database import checkpointer
+from tripmate.core.tracing import trace_span
+from tripmate.middleware.metrics import metrics_registry
 
 
 def _update_latency(metrics: dict, name: str, latency_ms: float):
@@ -41,40 +43,43 @@ def _update_latency(metrics: dict, name: str, latency_ms: float):
 
 
 async def supervisor_node(state: TravelState):
-    t0 = time.time()
-    query = state["user_query"]
-    metrics = state.get("metrics", {"agent_latencies": {}, "total_latency_ms": 0.0})
+    with trace_span("node.supervisor"):
+        t0 = time.time()
+        query = state["user_query"]
+        metrics = state.get("metrics", {"agent_latencies": {}, "total_latency_ms": 0.0})
 
-    fast_llm = model_router.get_model(ModelTier.FAST)
-    reasoning_llm = model_router.get_model(ModelTier.REASONING)
+        fast_llm = model_router.get_model(ModelTier.FAST)
+        reasoning_llm = model_router.get_model(ModelTier.REASONING)
 
-    allowed, reason = await run_guardrail_check(fast_llm or reasoning_llm, query)
-    if not allowed:
-        _update_latency(metrics, "guardrail", (time.time() - t0) * 1000)
+        allowed, reason = await run_guardrail_check(fast_llm or reasoning_llm, query)
+        if not allowed:
+            _update_latency(metrics, "guardrail", (time.time() - t0) * 1000)
+            metrics_registry.record_agent_execution("guardrail", "blocked", time.time() - t0)
+            return {
+                "status": "BLOCKED",
+                "guardrail_allowed": False,
+                "guardrail_reason": reason,
+                "selected_agents": [],
+                "supervisor_reasoning": reason,
+                "final_response": reason,
+                "messages": [AIMessage(content=f"Guardrail blocked request: {reason}")],
+                "metrics": metrics,
+            }
+
+        routing = await run_supervisor_routing(reasoning_llm, query)
+        _update_latency(metrics, "supervisor", (time.time() - t0) * 1000)
+        metrics_registry.record_agent_execution("supervisor", "success", time.time() - t0)
+
         return {
-            "status": "BLOCKED",
-            "guardrail_allowed": False,
+            "status": "RUNNING",
+            "guardrail_allowed": True,
             "guardrail_reason": reason,
-            "selected_agents": [],
-            "supervisor_reasoning": reason,
-            "final_response": reason,
-            "messages": [AIMessage(content=f"Guardrail blocked request: {reason}")],
+            "selected_agents": routing.selected_agents,
+            "trip_constraints": routing.trip_constraints.model_dump(),
+            "supervisor_reasoning": routing.reasoning,
+            "messages": [AIMessage(content="Supervisor node routing completed.")],
             "metrics": metrics,
         }
-
-    routing = await run_supervisor_routing(reasoning_llm, query)
-    _update_latency(metrics, "supervisor", (time.time() - t0) * 1000)
-
-    return {
-        "status": "RUNNING",
-        "guardrail_allowed": True,
-        "guardrail_reason": reason,
-        "selected_agents": routing.selected_agents,
-        "trip_constraints": routing.trip_constraints.model_dump(),
-        "supervisor_reasoning": routing.reasoning,
-        "messages": [AIMessage(content="Supervisor node routing completed.")],
-        "metrics": metrics,
-    }
 
 
 async def guardrail_blocked_node(state: TravelState):
@@ -90,14 +95,20 @@ from langchain_core.callbacks.manager import adispatch_custom_event
 
 async def _run_agent_with_events(agent_name: str, agent_obj: Any, llm: Any, query: str, context: Optional[Dict[str, Any]] = None):
     await adispatch_custom_event("agent_started", {"agent": agent_name})
-    try:
-        res = await agent_obj.run(llm, query, context=context)
-        status_val = getattr(res, "status", "success")
-        await adispatch_custom_event("agent_finished", {"agent": agent_name, "status": status_val})
-        return res
-    except Exception as exc:
-        await adispatch_custom_event("agent_finished", {"agent": agent_name, "status": "degraded", "error": str(exc)})
-        raise
+    t0 = time.time()
+    with trace_span(f"agent.{agent_name}", {"agent": agent_name}):
+        try:
+            res = await agent_obj.run(llm, query, context=context)
+            duration = time.time() - t0
+            status_val = getattr(res, "status", "success")
+            metrics_registry.record_agent_execution(agent_name, status_val, duration)
+            await adispatch_custom_event("agent_finished", {"agent": agent_name, "status": status_val})
+            return res
+        except Exception as exc:
+            duration = time.time() - t0
+            metrics_registry.record_agent_execution(agent_name, "failure", duration)
+            await adispatch_custom_event("agent_finished", {"agent": agent_name, "status": "degraded", "error": str(exc)})
+            raise
 
 
 async def parallel_specialists_node(state: TravelState):

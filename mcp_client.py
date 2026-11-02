@@ -251,32 +251,64 @@ async def _get_server_tool(server_name: str, tool_name: str):
 # Tavily MCP
 # =========================================================
 
-async def tavily_mcp_search(query: str):
+async def tavily_mcp_search(query: str, request_id: Optional[str] = None):
+    from tripmate.core.context import get_request_id
+    req_id = request_id or get_request_id() or ""
     search_tool = await _get_server_tool("tavily", "tavily_search")
-    return await search_tool.ainvoke({"query": query})
+    call_config = {"metadata": {"request_id": req_id}, "configurable": {"request_id": req_id}} if req_id else None
+    try:
+        if call_config:
+            return await search_tool.ainvoke({"query": query}, config=call_config)
+        return await search_tool.ainvoke({"query": query})
+    except TypeError:
+        return await search_tool.ainvoke({"query": query})
 
 
 # =========================================================
 # AviationStack MCP
 # =========================================================
 
-async def aviation_mcp_call(tool_name: str, tool_args: Optional[dict[str, Any]] = None):
+async def aviation_mcp_call(tool_name: str, tool_args: Optional[dict[str, Any]] = None, request_id: Optional[str] = None):
+    from tripmate.core.context import get_request_id
+    req_id = request_id or get_request_id() or ""
     aviation_tool = await _get_server_tool("aviationstack", tool_name)
-    return await aviation_tool.ainvoke(tool_args or {})
+    call_config = {"metadata": {"request_id": req_id}, "configurable": {"request_id": req_id}} if req_id else None
+    try:
+        if call_config:
+            return await aviation_tool.ainvoke(tool_args or {}, config=call_config)
+        return await aviation_tool.ainvoke(tool_args or {})
+    except TypeError:
+        return await aviation_tool.ainvoke(tool_args or {})
 
 
 # =========================================================
 # Weather MCP
 # =========================================================
 
-async def weather_mcp_search(city: str):
+async def weather_mcp_search(city: str, request_id: Optional[str] = None):
+    from tripmate.core.context import get_request_id
+    req_id = request_id or get_request_id() or ""
     weather_tool = await _get_server_tool("weather", "get_current_weather")
-    return await weather_tool.ainvoke({"city": city})
+    call_config = {"metadata": {"request_id": req_id}, "configurable": {"request_id": req_id}} if req_id else None
+    try:
+        if call_config:
+            return await weather_tool.ainvoke({"city": city}, config=call_config)
+        return await weather_tool.ainvoke({"city": city})
+    except TypeError:
+        return await weather_tool.ainvoke({"city": city})
 
 
-async def forecast_mcp_search(city: str):
+async def forecast_mcp_search(city: str, request_id: Optional[str] = None):
+    from tripmate.core.context import get_request_id
+    req_id = request_id or get_request_id() or ""
     forecast_tool = await _get_server_tool("weather", "get_forecast")
-    return await forecast_tool.ainvoke({"city": city})
+    call_config = {"metadata": {"request_id": req_id}, "configurable": {"request_id": req_id}} if req_id else None
+    try:
+        if call_config:
+            return await forecast_tool.ainvoke({"city": city}, config=call_config)
+        return await forecast_tool.ainvoke({"city": city})
+    except TypeError:
+        return await forecast_tool.ainvoke({"city": city})
 
 
 # =========================================================

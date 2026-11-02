@@ -437,6 +437,19 @@ async def legacy_approve(
             status_code=400,
             content={"success": False, "error": "Please provide revision feedback when rejecting the draft."},
         )
+    from tripmate.core.audit import audit_logger, AuditEventType
+    client_ip = request.client.host if request.client else "unknown"
+    request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
+    audit_logger.record(
+        event_type=AuditEventType.APPROVAL_DECISION,
+        action="itinerary_approved" if request_data.approved else "itinerary_rejected",
+        actor=current_user.get("id", "anonymous"),
+        target_id=request_data.thread_id,
+        status="success",
+        client_ip=client_ip,
+        request_id=request_id,
+        details={"approved": request_data.approved, "feedback": request_data.feedback},
+    )
     result = await travel_service.resume_travel_plan(
         thread_id=request_data.thread_id,
         approved=request_data.approved,

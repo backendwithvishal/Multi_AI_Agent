@@ -23,6 +23,7 @@ from tripmate.schemas import (
 )
 from tripmate.services.auth_service import auth_service
 from tripmate.api.dependencies import get_current_user
+from tripmate.core.audit import audit_logger, AuditEventType
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Identity"])
 
@@ -71,6 +72,17 @@ async def login(req: UserLoginRequest, request: Request):
             request_id=request_id,
         )
     except ValueError as exc:
+        client_ip = request.client.host if request.client else "unknown"
+        audit_logger.record(
+            event_type=AuditEventType.AUTH_FAILURE,
+            action="login_failed",
+            actor=getattr(req, "username_or_email", getattr(req, "username", "unknown")),
+            target_id="auth_service",
+            status="failure",
+            client_ip=client_ip,
+            request_id=request_id,
+            details={"reason": str(exc)},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "INVALID_CREDENTIALS", "message": str(exc)},

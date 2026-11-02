@@ -8,6 +8,8 @@ import random
 from typing import Any, Callable, Dict, Optional
 
 from tripmate.config.settings import settings
+from tripmate.core.context import get_request_id
+from tripmate.middleware.metrics import metrics_registry
 from tripmate.integrations.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerOpenException,
@@ -72,11 +74,55 @@ async def invoke_llm_with_resilience(
     effective_timeout = timeout or settings.LLM_TIMEOUT_SECONDS
     breaker = PROVIDER_BREAKERS.get(provider_name.lower(), groq_breaker)
 
+    req_id = get_request_id() or ""
+    call_config = {
+        "metadata": {"request_id": req_id},
+        "configurable": {"request_id": req_id},
+        "tags": [f"request_id:{req_id}"] if req_id else [],
+    }
+
+    # Inject X-Request-ID into LLM client default headers if supported
+    if req_id and hasattr(llm, "default_headers") and isinstance(llm.default_headers, dict):
+        llm.default_headers["X-Request-ID"] = req_id
+
     async def _call():
-        return await asyncio.wait_for(
-            breaker.call(llm.ainvoke, messages),
-            timeout=effective_timeout,
-        )
+        try:
+            res = await asyncio.wait_for(
+                breaker.call(llm.ainvoke, messages, config=call_config),
+                timeout=effective_timeout,
+            )
+        except TypeError:
+            # Fallback if mock or client doesn't accept config
+            res = await asyncio.wait_for(
+                breaker.call(llm.ainvoke, messages),
+                timeout=effective_timeout,
+            )
+
+        # Record LLM token metrics if available
+        try:
+            model_name = (
+                getattr(llm, "model_name", None)
+                or getattr(llm, "model", None)
+                or provider_name
+            )
+            usage = None
+            if hasattr(res, "usage_metadata") and res.usage_metadata:
+                usage = res.usage_metadata
+                prompt_tokens = usage.get("input_tokens", 0)
+                completion_tokens = usage.get("output_tokens", 0)
+            elif hasattr(res, "response_metadata") and isinstance(res.response_metadata, dict):
+                meta_usage = res.response_metadata.get("token_usage") or res.response_metadata.get("usage") or {}
+                prompt_tokens = meta_usage.get("prompt_tokens", 0)
+                completion_tokens = meta_usage.get("completion_tokens", 0)
+            else:
+                prompt_tokens, completion_tokens = 0, 0
+
+            if prompt_tokens > 0 or completion_tokens > 0:
+                metrics_registry.record_llm_tokens(model_name, prompt_tokens, completion_tokens)
+        except Exception as exc:
+            logger.debug(f"[LLM Metrics Notice] Could not parse token usage: {exc}")
+
+        return res
 
     return await execute_with_backoff_and_jitter(_call, max_retries=max_retries)
 

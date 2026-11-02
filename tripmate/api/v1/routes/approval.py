@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from tripmate.schemas import ApprovalRequest, APIResponse, ErrorDetail
 from tripmate.services.travel_service import travel_service
 from tripmate.api.dependencies import get_current_user
+from tripmate.core.audit import audit_logger, AuditEventType
 
 router = APIRouter(prefix="/travel", tags=["Human-in-the-Loop Approval API"])
 
@@ -39,6 +40,18 @@ async def approve_travel_plan(
         )
 
     try:
+        client_ip = request.client.host if request.client else "unknown"
+        audit_logger.record(
+            event_type=AuditEventType.APPROVAL_DECISION,
+            action="itinerary_approved" if request_data.approved else "itinerary_rejected",
+            actor=effective_user_id or "anonymous",
+            target_id=request_data.thread_id,
+            status="success",
+            client_ip=client_ip,
+            request_id=request_id,
+            details={"approved": request_data.approved, "feedback": request_data.feedback},
+        )
+
         result = await travel_service.resume_travel_plan(
             thread_id=request_data.thread_id,
             approved=request_data.approved,

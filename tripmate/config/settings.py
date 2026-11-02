@@ -201,10 +201,15 @@ class Settings(BaseSettings):
     MCP_CACHE_TTL_SECONDS: int = 3600
     MCP_CACHE_MAX_BYTES: int = 65_536  # 64 KB per-key limit
 
-    # Logging level
+    # Logging & Observability Settings
     LOG_LEVEL: str = "INFO"
+    CAPTURE_PROMPTS: bool = False  # Prompt capture OFF by default to avoid data leakage
+    OTEL_ENABLED: bool = False  # OpenTelemetry distributed tracing toggle
+    METRICS_PROTECTED: bool = True  # Protect /metrics endpoint from public scrapers
+    METRICS_TOKEN: Optional[str] = None
+    METRICS_ALLOWED_IPS: Union[List[str], str] = Field(default_factory=lambda: ["127.0.0.1", "::1", "testclient"])
 
-    @field_validator("ALLOWED_ORIGINS", "TRUSTED_PROXIES", "TOOL_ALLOWED_HOSTS", mode="before")
+    @field_validator("ALLOWED_ORIGINS", "TRUSTED_PROXIES", "TOOL_ALLOWED_HOSTS", "METRICS_ALLOWED_IPS", mode="before")
     @classmethod
     def _parse_list_fields(cls, v):
         if isinstance(v, str):
@@ -287,6 +292,23 @@ class Settings(BaseSettings):
             self.MCP_TIMEOUT_SECONDS = _parse_float("MCP_TIMEOUT_SECONDS", self.MCP_TIMEOUT_SECONDS)
         if "TRUSTED_PROXIES" in os.environ:
             self.TRUSTED_PROXIES = _parse_list("TRUSTED_PROXIES", self.TRUSTED_PROXIES)
+        if "CAPTURE_PROMPTS" in os.environ:
+            self.CAPTURE_PROMPTS = _parse_bool("CAPTURE_PROMPTS", self.CAPTURE_PROMPTS)
+        if "OTEL_ENABLED" in os.environ or "ENABLE_OTEL" in os.environ:
+            self.OTEL_ENABLED = _parse_bool("OTEL_ENABLED", _parse_bool("ENABLE_OTEL", self.OTEL_ENABLED))
+        if "METRICS_PROTECTED" in os.environ:
+            self.METRICS_PROTECTED = _parse_bool("METRICS_PROTECTED", self.METRICS_PROTECTED)
+        if "METRICS_TOKEN" in os.environ:
+            self.METRICS_TOKEN = _parse_str("METRICS_TOKEN") or None
+
+        # Safeguard LangSmith auth and prompt privacy
+        if self.LANGCHAIN_TRACING_V2 == "true" and not self.LANGCHAIN_API_KEY:
+            self.LANGCHAIN_TRACING_V2 = "false"
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+
+        if not self.CAPTURE_PROMPTS:
+            os.environ["LANGCHAIN_HIDE_INPUTS"] = "true"
+            os.environ["LANGCHAIN_HIDE_OUTPUTS"] = "true"
 
     @property
     def is_production(self) -> bool:

@@ -11,9 +11,10 @@ This module provides reusable FastAPI dependency functions for endpoint security
 import asyncio
 import secrets
 from typing import Any, Dict, Optional
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 from tripmate.config.settings import settings
 from tripmate.database.store import store, verify_token
+from tripmate.core.audit import audit_logger, AuditEventType
 
 
 async def verify_api_key(
@@ -131,6 +132,14 @@ async def get_current_user(
             "role": "user",
         }
 
+    audit_logger.record(
+        event_type=AuditEventType.AUTH_FAILURE,
+        action="authentication_failed",
+        actor="anonymous",
+        target_id="api",
+        status="failure",
+        details={"reason": "Missing or invalid bearer token or API key"},
+    )
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail={

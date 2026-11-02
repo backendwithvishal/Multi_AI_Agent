@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Any, Dict, Iterator, Optional, Sequence
 
 logger = logging.getLogger("tripmate.database")
@@ -54,7 +55,15 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         self.pool = pool
 
     def get_tuple(self, config: Dict[str, Any]) -> Optional[Any]:
-        return self.saver.get_tuple(config)
+        t0 = time.time()
+        try:
+            return self.saver.get_tuple(config)
+        finally:
+            try:
+                from tripmate.middleware.metrics import metrics_registry
+                metrics_registry.record_checkpoint_db_latency(time.time() - t0)
+            except Exception:
+                pass
 
     def list(
         self,
@@ -73,13 +82,29 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         metadata: Any,
         new_versions: Any,
     ) -> Dict[str, Any]:
-        return self.saver.put(config, checkpoint, metadata, new_versions)
+        t0 = time.time()
+        try:
+            return self.saver.put(config, checkpoint, metadata, new_versions)
+        finally:
+            try:
+                from tripmate.middleware.metrics import metrics_registry
+                metrics_registry.record_checkpoint_db_latency(time.time() - t0)
+            except Exception:
+                pass
 
     def put_writes(self, config: Dict[str, Any], writes: Sequence[Any], task_id: str) -> None:
         return self.saver.put_writes(config, writes, task_id)
 
     async def aget_tuple(self, config: Dict[str, Any]) -> Optional[Any]:
-        return await asyncio.to_thread(self.saver.get_tuple, config)
+        t0 = time.time()
+        try:
+            return await asyncio.to_thread(self.saver.get_tuple, config)
+        finally:
+            try:
+                from tripmate.middleware.metrics import metrics_registry
+                metrics_registry.record_checkpoint_db_latency(time.time() - t0)
+            except Exception:
+                pass
 
     async def alist(
         self,
@@ -102,7 +127,15 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         metadata: Any,
         new_versions: Any,
     ) -> Dict[str, Any]:
-        return await asyncio.to_thread(self.saver.put, config, checkpoint, metadata, new_versions)
+        t0 = time.time()
+        try:
+            return await asyncio.to_thread(self.saver.put, config, checkpoint, metadata, new_versions)
+        finally:
+            try:
+                from tripmate.middleware.metrics import metrics_registry
+                metrics_registry.record_checkpoint_db_latency(time.time() - t0)
+            except Exception:
+                pass
 
     async def aput_writes(self, config: Dict[str, Any], writes: Sequence[Any], task_id: str) -> None:
         return await asyncio.to_thread(self.saver.put_writes, config, writes, task_id)

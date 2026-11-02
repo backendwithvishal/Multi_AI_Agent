@@ -60,9 +60,20 @@ class RedisHybridCache:
                 val = await asyncio.wait_for(self._redis_client.get(cache_key), timeout=0.25)
                 if val is not None:
                     try:
+                        from tripmate.middleware.metrics import metrics_registry
+                        metrics_registry.record_cache_hit("redis")
+                    except Exception:
+                        pass
+                    try:
                         return json.loads(val)
                     except Exception:
                         return val
+                else:
+                    try:
+                        from tripmate.middleware.metrics import metrics_registry
+                        metrics_registry.record_cache_miss("redis")
+                    except Exception:
+                        pass
             except Exception as exc:
                 self._use_redis = False
                 logger.info(f"[Cache] Redis unavailable ({exc}). Using in-memory fallback.")
@@ -129,9 +140,20 @@ class RedisHybridCache:
                 val = await asyncio.wait_for(self._redis_client.get(cache_key), timeout=0.25)
                 if val is not None:
                     try:
+                        from tripmate.middleware.metrics import metrics_registry
+                        metrics_registry.record_cache_hit("redis")
+                    except Exception:
+                        pass
+                    try:
                         return json.loads(val)
                     except Exception:
                         return val
+                else:
+                    try:
+                        from tripmate.middleware.metrics import metrics_registry
+                        metrics_registry.record_cache_miss("redis")
+                    except Exception:
+                        pass
             except Exception as exc:
                 self._use_redis = False
                 logger.info(f"[Cache] Redis get_mcp failed ({exc}). Falling back to memory.")

@@ -213,6 +213,11 @@ class TravelService(metaclass=SingletonMeta):
         current_task = asyncio.current_task()
         if current_task is not None:
             ACTIVE_RUNS.add(current_task)
+            try:
+                from tripmate.middleware.metrics import metrics_registry
+                metrics_registry.inc_inflight_runs()
+            except Exception:
+                pass
 
         try:
             # Emit initial SSE heartbeat and start event
@@ -377,6 +382,11 @@ class TravelService(metaclass=SingletonMeta):
         finally:
             if current_task is not None:
                 ACTIVE_RUNS.discard(current_task)
+                try:
+                    from tripmate.middleware.metrics import metrics_registry
+                    metrics_registry.dec_inflight_runs()
+                except Exception:
+                    pass
 
 
 # Active in-flight runs registry for graceful shutdown
