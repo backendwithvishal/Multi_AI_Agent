@@ -57,14 +57,15 @@ class RedisHybridCache:
         if self._use_redis and self._redis_client:
             try:
                 cache_key = self.in_memory._hash_key(namespace, key_data)
-                val = await self._redis_client.get(cache_key)
+                val = await asyncio.wait_for(self._redis_client.get(cache_key), timeout=0.25)
                 if val is not None:
                     try:
                         return json.loads(val)
                     except Exception:
                         return val
-            except Exception:
-                pass
+            except Exception as exc:
+                self._use_redis = False
+                logger.info(f"[Cache] Redis unavailable ({exc}). Using in-memory fallback.")
         return await self.in_memory.get(namespace, key_data)
 
     async def set(self, namespace: str, key_data: Any, value: Any, ttl_seconds: Optional[int] = None) -> None:
@@ -75,9 +76,10 @@ class RedisHybridCache:
                 cache_key = self.in_memory._hash_key(namespace, key_data)
                 ttl = ttl_seconds or self.in_memory.default_ttl
                 serialized = json.dumps(value, default=str)
-                await self._redis_client.set(cache_key, serialized, ex=ttl)
-            except Exception:
-                pass
+                await asyncio.wait_for(self._redis_client.set(cache_key, serialized, ex=ttl), timeout=0.25)
+            except Exception as exc:
+                self._use_redis = False
+                logger.info(f"[Cache] Redis set failed ({exc}). Using in-memory fallback.")
 
     async def get_or_set(
         self,
@@ -124,14 +126,15 @@ class RedisHybridCache:
         cache_key = self._build_mcp_cache_key(namespace, query_data, user_id)
         if self._use_redis and self._redis_client:
             try:
-                val = await self._redis_client.get(cache_key)
+                val = await asyncio.wait_for(self._redis_client.get(cache_key), timeout=0.25)
                 if val is not None:
                     try:
                         return json.loads(val)
                     except Exception:
                         return val
             except Exception as exc:
-                logger.warning(f"[Cache] Redis get_mcp failed ({exc}). Falling back to memory.")
+                self._use_redis = False
+                logger.info(f"[Cache] Redis get_mcp failed ({exc}). Falling back to memory.")
         return await self.in_memory.get(f"mcp:{namespace}:{user_scope}", query_data)
 
     async def set_mcp(
@@ -159,9 +162,10 @@ class RedisHybridCache:
         if self._use_redis and self._redis_client:
             try:
                 cache_key = self._build_mcp_cache_key(namespace, query_data, user_id)
-                await self._redis_client.set(cache_key, serialized_val, ex=ttl)
+                await asyncio.wait_for(self._redis_client.set(cache_key, serialized_val, ex=ttl), timeout=0.25)
             except Exception as exc:
-                logger.warning(f"[Cache] Redis set_mcp failed ({exc}).")
+                self._use_redis = False
+                logger.info(f"[Cache] Redis set_mcp failed ({exc}). Using in-memory fallback.")
         return True
 
     async def get_or_set_mcp(

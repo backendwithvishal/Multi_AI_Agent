@@ -24,9 +24,15 @@ class BoundedAsyncTTLCache:
         self.max_entries = max_entries
         self._store: Dict[str, Tuple[float, Any]] = {}
         self._inflight: Dict[str, asyncio.Future] = {}
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
         self._hits = 0
         self._misses = 0
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def _hash_key(self, namespace: str, key_data: Any) -> str:
         """Generates a deterministic 16-character SHA-256 hash key."""
@@ -48,7 +54,7 @@ class BoundedAsyncTTLCache:
     async def get(self, namespace: str, key_data: Any) -> Optional[Any]:
         """Fetches value from cache if present and unexpired."""
         cache_key = self._hash_key(namespace, key_data)
-        async with self._lock:
+        async with self.lock:
             if cache_key in self._store:
                 expires_at, val = self._store[cache_key]
                 if time.time() < expires_at:
@@ -65,7 +71,7 @@ class BoundedAsyncTTLCache:
         now = time.time()
         expires_at = now + ttl
 
-        async with self._lock:
+        async with self.lock:
             self._evict_if_full(now)
             self._store[cache_key] = (expires_at, value)
 
@@ -84,7 +90,7 @@ class BoundedAsyncTTLCache:
         cache_key = self._hash_key(namespace, key_data)
 
         # Single-flight lock: if another task is already fetching this key, await its result
-        async with self._lock:
+        async with self.lock:
             if cache_key in self._inflight:
                 future = self._inflight[cache_key]
                 return await future
@@ -112,12 +118,12 @@ class BoundedAsyncTTLCache:
                 future.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
             raise exc
         finally:
-            async with self._lock:
+            async with self.lock:
                 self._inflight.pop(cache_key, None)
 
     async def clear(self) -> None:
         """Clears all stored entries and metrics."""
-        async with self._lock:
+        async with self.lock:
             self._store.clear()
             self._inflight.clear()
             self._hits = 0

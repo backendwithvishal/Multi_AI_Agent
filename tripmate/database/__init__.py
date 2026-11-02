@@ -38,6 +38,7 @@ except ImportError:
 from tripmate.config.settings import settings
 
 _db_pool: Optional[Any] = None
+_db_pool_init_attempted: bool = False
 checkpointer_pool: Optional[Any] = None
 
 
@@ -138,37 +139,53 @@ def get_formatted_db_url() -> Optional[str]:
 
 def get_db_pool() -> Optional[Any]:
     """Returns singleton thread-safe ConnectionPool for synchronous application operations."""
-    global _db_pool
+    global _db_pool, _db_pool_init_attempted
     if _db_pool is not None and not _db_pool.closed:
         return _db_pool
+    if _db_pool_init_attempted and _db_pool is None:
+        return None
 
     url = get_formatted_db_url()
     if not url or not psycopg or not ConnectionPool:
+        _db_pool_init_attempted = True
         return None
 
     try:
+        # Quick connectivity test with connect_timeout so we don't stall dev/test runs
+        with psycopg.connect(url, connect_timeout=2) as test_conn:
+            with test_conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+
         _db_pool = ConnectionPool(
             url,
-            min_size=1,
-            max_size=10,
+            min_size=settings.DB_POOL_MIN_SIZE,
+            max_size=settings.DB_POOL_MAX_SIZE,
+            timeout=settings.DB_POOL_TIMEOUT_SECONDS,
+            check=getattr(ConnectionPool, "check_connection", None),
             kwargs={"row_factory": dict_row},
             open=True,
         )
+        _db_pool_init_attempted = True
         return _db_pool
     except Exception as exc:
-        logger.warning(f"Failed to initialize database connection pool: {exc}")
+        _db_pool_init_attempted = True
+        if settings.is_production:
+            logger.error(f"Failed to initialize database connection pool in production: {exc}")
+            raise
+        logger.info(f"Database connection pool unavailable ({exc}). Using in-memory store for development.")
         return None
 
 
 def close_db_pools():
     """Closes all database connection pools on shutdown."""
-    global _db_pool, checkpointer_pool
+    global _db_pool, _db_pool_init_attempted, checkpointer_pool
     if _db_pool is not None:
         try:
             _db_pool.close()
         except Exception:
             pass
         _db_pool = None
+    _db_pool_init_attempted = False
 
     if checkpointer_pool is not None:
         try:
@@ -242,7 +259,7 @@ def setup_checkpoint_tables(db_url: Optional[str] = None) -> bool:
     if not url or not psycopg or not PostgresSaver:
         return False
     try:
-        with psycopg.connect(url, autocommit=True, row_factory=dict_row) as sync_conn:
+        with psycopg.connect(url, connect_timeout=2, autocommit=True, row_factory=dict_row) as sync_conn:
             sync_saver = PostgresSaver(sync_conn)
             sync_saver.setup()
         logger.info("[Checkpointer] Explicit PostgreSQL checkpoint tables verified and ready.")

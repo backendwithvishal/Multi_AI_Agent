@@ -9,6 +9,7 @@ Endpoints:
 - GET /api/v1/admin/runs: Audit workflow execution history
 """
 
+import asyncio
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from tripmate.schemas import APIResponse, AdminStatsResponse, UserRegisterRequest
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/admin", tags=["Platform Administration"])
 )
 async def get_stats(request: Request, admin_user: Dict[str, Any] = Depends(require_admin)):
     request_id = getattr(request.state, "request_id", "req_adm")
-    stats = admin_service.get_platform_stats()
+    stats = await asyncio.to_thread(admin_service.get_platform_stats)
     return APIResponse(
         success=True,
         data=AdminStatsResponse(**stats),
@@ -44,7 +45,7 @@ async def get_stats(request: Request, admin_user: Dict[str, Any] = Depends(requi
 )
 async def list_users(request: Request, admin_user: Dict[str, Any] = Depends(require_admin)):
     request_id = getattr(request.state, "request_id", "req_adm")
-    users = admin_service.list_all_users()
+    users = await asyncio.to_thread(admin_service.list_all_users)
     return APIResponse(
         success=True,
         data=users,
@@ -66,7 +67,8 @@ async def create_user(
 ):
     request_id = getattr(request.state, "request_id", "req_adm")
     try:
-        token_data = admin_service.create_user_account(
+        token_data = await asyncio.to_thread(
+            admin_service.create_user_account,
             username=req.username,
             email=req.email,
             password=req.password,

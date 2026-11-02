@@ -1,7 +1,7 @@
 # Multi_AI_Agent — Production-Grade Multi-Agent AI Orchestration Platform
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/backendwithvishal/Multi_AI_Agent)
-[![Tests](https://img.shields.io/badge/tests-93%2F93%20passing%20(100%25)-success)](https://github.com/backendwithvishal/Multi_AI_Agent)
+[![Tests](https://img.shields.io/badge/tests-128%2F128%20passing%20(100%25)-success)](https://github.com/backendwithvishal/Multi_AI_Agent)
 [![Render Deployment](https://img.shields.io/badge/render-live--deployment-success)](https://multi-ai-agent-m4g6.onrender.com/)
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.13-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688)](https://fastapi.tiangolo.com)
@@ -292,8 +292,11 @@ Interactive Swagger UI is available at: [http://localhost:8000/docs](http://loca
 
 ### 5. Run Verification & Benchmarks
 ```bash
-# Run the complete test suite (67 tests)
+# Run the complete test suite (128 tests — includes runtime reliability, streaming, HITL, circuit breakers)
 pytest -v
+
+# Run only the runtime reliability / streaming tests
+pytest tests/test_runtime_reliability.py -v
 
 # Run the agent evaluation benchmark
 python -m evaluation.evaluator

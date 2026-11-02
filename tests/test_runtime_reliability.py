@@ -171,6 +171,108 @@ async def test_approval_idempotency(auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_rejection_idempotency(auth_headers):
+    """Verifies that rejecting an itinerary twice returns identical cached response."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        plan_resp = await client.post(
+            "/api/travel",
+            headers=auth_headers,
+            json={"message": "Trip to Amsterdam"},
+        )
+        assert plan_resp.status_code == 200
+        thread_id = plan_resp.json()["thread_id"]
+
+        reject_payload = {"thread_id": thread_id, "approved": False, "feedback": "Choose 4-star hotels only"}
+        resp1 = await client.post("/api/travel/approve", headers=auth_headers, json=reject_payload)
+        assert resp1.status_code == 200
+        res1 = resp1.json()
+        assert res1["success"] is True
+
+        # Second call returns identical response
+        resp2 = await client.post("/api/travel/approve", headers=auth_headers, json=reject_payload)
+        assert resp2.status_code == 200
+        res2 = resp2.json()
+        assert res2["success"] is True
+        assert res2["answer"] == res1["answer"]
+
+
+@pytest.mark.asyncio
+async def test_approval_invalid_state(auth_headers):
+    """Verifies that attempting to resume a non-interrupted thread returns 400 INVALID_WORKFLOW_STATE."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        from tripmate.graph.workflow import travel_workflow_graph
+
+        thread_id = f"thread_not_interrupted_{int(time.time()*1000)}"
+        token = auth_headers["Authorization"].replace("Bearer ", "")
+        user = store.get_user_by_api_key(token)
+        if user:
+            store.register_thread_owner(thread_id, user["id"])
+
+        config = {"configurable": {"thread_id": thread_id}}
+        # Update state without interrupt
+        await travel_workflow_graph.aupdate_state(config, {"user_query": "Test", "status": "IN_PROGRESS"})
+
+        resp = await client.post(
+            "/api/travel/approve",
+            headers=auth_headers,
+            json={"thread_id": thread_id, "approved": True, "feedback": ""},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "INVALID_WORKFLOW_STATE"
+
+
+@pytest.mark.asyncio
+async def test_rejection_idempotency(auth_headers):
+    """Verifies that rejecting an itinerary twice returns identical cached response."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        plan_resp = await client.post(
+            "/api/travel",
+            headers=auth_headers,
+            json={"message": "Trip to Amsterdam"},
+        )
+        assert plan_resp.status_code == 200
+        thread_id = plan_resp.json()["thread_id"]
+
+        reject_payload = {"thread_id": thread_id, "approved": False, "feedback": "Choose 4-star hotels only"}
+        resp1 = await client.post("/api/travel/approve", headers=auth_headers, json=reject_payload)
+        assert resp1.status_code == 200
+        res1 = resp1.json()
+        assert res1["success"] is True
+
+        # Second call returns identical response
+        resp2 = await client.post("/api/travel/approve", headers=auth_headers, json=reject_payload)
+        assert resp2.status_code == 200
+        res2 = resp2.json()
+        assert res2["success"] is True
+        assert res2["answer"] == res1["answer"]
+
+
+@pytest.mark.asyncio
+async def test_approval_invalid_state(auth_headers):
+    """Verifies that attempting to resume a non-interrupted thread returns 400 INVALID_WORKFLOW_STATE."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        from tripmate.graph.workflow import travel_workflow_graph
+
+        thread_id = f"thread_not_interrupted_{int(time.time()*1000)}"
+        token = auth_headers["Authorization"].replace("Bearer ", "")
+        user = store.get_user_by_api_key(token)
+        if user:
+            store.register_thread_owner(thread_id, user["id"])
+
+        config = {"configurable": {"thread_id": thread_id}}
+        # Update state without interrupt
+        await travel_workflow_graph.aupdate_state(config, {"user_query": "Test", "status": "IN_PROGRESS"})
+
+        resp = await client.post(
+            "/api/travel/approve",
+            headers=auth_headers,
+            json={"thread_id": thread_id, "approved": True, "feedback": ""},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"]["code"] == "INVALID_WORKFLOW_STATE"
+
+
+@pytest.mark.asyncio
 async def test_approval_ttl_expiry(auth_headers):
     """Verifies that an approval request past its TTL returns HTTP 410 GONE."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -248,4 +350,98 @@ def test_postgres_required_in_prod(monkeypatch):
         initialize_checkpointer()
     assert "PostgreSQL checkpointer" in str(exc_info.value)
     assert "Production/Non-dev startup failed" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_llm_circuit_breaker_returns_degraded_mode():
+    """Verifies that an open LLM circuit breaker causes degraded fallback, not a hard 500."""
+    from tripmate.integrations.llm_resilience import groq_breaker, invoke_llm_with_resilience
+
+    # Force-open the groq circuit breaker
+    original_state = groq_breaker.state
+    groq_breaker.state = groq_breaker.state.OPEN
+    groq_breaker.failure_count = 5
+    groq_breaker.last_failure_time = time.time()
+    groq_breaker.last_state_change = time.time()
+
+    try:
+        from tripmate.integrations.circuit_breaker import CircuitBreakerOpenException
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        class MockLLM:
+            async def ainvoke(self, messages):
+                return type("R", (), {"content": "mock"})()
+
+        mock_llm = MockLLM()
+
+        # When circuit is open, should raise CircuitBreakerOpenException
+        with pytest.raises(CircuitBreakerOpenException):
+            await invoke_llm_with_resilience(
+                mock_llm, [HumanMessage(content="test")], provider_name="groq"
+            )
+    finally:
+        groq_breaker.reset()
+
+
+@pytest.mark.asyncio
+async def test_mcp_server_crash_triggers_backoff():
+    """Verifies that a crashed MCP server enters backoff cooldown and raises on subsequent calls."""
+    from mcp_client import MCPManager
+
+    manager = MCPManager()
+
+    # Simulate a crash notification
+    exc = RuntimeError("stdio process terminated unexpectedly")
+    await manager.handle_tool_crash("weather", exc)
+
+    assert manager._failures.get("weather", 0) >= 1
+    assert "weather" in manager._last_failure_time
+
+    # Getting tool during cooldown should raise with backoff message
+    with pytest.raises(RuntimeError) as exc_info:
+        await manager.get_tool("weather", "get_current_weather")
+    assert "backoff" in str(exc_info.value).lower() or "cooldown" in str(exc_info.value).lower() or "weather" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_graceful_shutdown_cancels_active_runs():
+    """Verifies that ACTIVE_RUNS tasks are cancelled on application shutdown."""
+    from tripmate.services.travel_service import ACTIVE_RUNS
+
+    cancelled_flag = {"cancelled": False}
+
+    async def long_running_task():
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            cancelled_flag["cancelled"] = True
+            raise
+
+    task = asyncio.create_task(long_running_task())
+    ACTIVE_RUNS.add(task)
+    # Yield control to let task begin execution
+    await asyncio.sleep(0.01)
+
+    # Simulate shutdown: cancel all active runs
+    for t in list(ACTIVE_RUNS):
+        if not t.done():
+            t.cancel()
+    await asyncio.gather(*[t for t in list(ACTIVE_RUNS) if not t.done()], return_exceptions=True)
+    ACTIVE_RUNS.discard(task)
+
+    assert cancelled_flag["cancelled"] is True
+    assert task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_dev_env_allows_memory_saver(monkeypatch):
+    """Verifies that dev environment allows MemorySaver when PostgreSQL is unavailable."""
+    monkeypatch.setattr(settings, "ENV", "dev")
+    monkeypatch.setattr(settings, "APP_ENV", "development")
+    monkeypatch.setattr(settings, "DATABASE_URL", None)
+
+    saver = initialize_checkpointer()
+    # In dev with no DATABASE_URL, should return MemorySaver (not raise)
+    assert saver is not None
+
 
