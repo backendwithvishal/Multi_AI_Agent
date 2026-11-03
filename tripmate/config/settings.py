@@ -115,6 +115,7 @@ class Settings(BaseSettings):
 
     # Security & Authentication settings
     API_KEY: Optional[str] = None
+    JWT_SECRET_KEY: Optional[str] = None
     ADMIN_REGISTRATION_SECRET: Optional[str] = None
     AUTH_REQUIRED: bool = False
     ALLOWED_ORIGINS: Union[List[str], str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"])
@@ -226,8 +227,9 @@ class Settings(BaseSettings):
     def __init__(self, **values):
         super().__init__(**values)
 
-        # Synchronize ENV and APP_ENV
-        env_from_os = (os.getenv("ENV") or os.getenv("APP_ENV") or self.ENV or self.APP_ENV).strip().lower()
+        # Synchronize ENV and APP_ENV: explicit constructor values take highest precedence
+        explicit_env = values.get("APP_ENV") or values.get("ENV")
+        env_from_os = (explicit_env or os.getenv("ENV") or os.getenv("APP_ENV") or self.ENV or self.APP_ENV).strip().lower()
         if env_from_os in ("prod", "production"):
             self.APP_ENV = "production"
             self.ENV = "prod"
@@ -343,6 +345,10 @@ class Settings(BaseSettings):
             if missing:
                 raise ValueError(
                     f"Production startup failed! Mandatory configuration missing: {', '.join(missing)}"
+                )
+            if self.JWT_SECRET_KEY and self.JWT_SECRET_KEY in ("dev_jwt_secret_key_change_in_prod", "secret", "change-me", ""):
+                raise ValueError(
+                    "Production startup failed! JWT_SECRET_KEY must be changed from default development secret."
                 )
 
             if "*" in self.ALLOWED_ORIGINS and self.AUTH_REQUIRED and getattr(self, "CORS_ALLOW_CREDENTIALS", False):

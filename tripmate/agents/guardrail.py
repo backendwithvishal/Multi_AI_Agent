@@ -269,6 +269,8 @@ ALL_DELIMITER_TAGS = [
     "</untrusted_user_query>",
     "<untrusted_tool_data>",
     "</untrusted_tool_data>",
+    "<untrusted_input>",
+    "</untrusted_input>",
     "<system>",
     "</system>",
     "<|im_start|>",

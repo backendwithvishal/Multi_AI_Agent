@@ -104,9 +104,16 @@ async def get_current_user(
     if token:
         claims = verify_token(token)
         if claims:
-            user = await asyncio.to_thread(store.get_user_by_id, claims.get("uid", ""))
+            uid = claims.get("uid") or claims.get("sub") or ""
+            user = await asyncio.to_thread(store.get_user_by_id, uid)
             if user:
                 return user
+            return {
+                "id": uid,
+                "username": claims.get("usr") or claims.get("sub") or claims.get("username") or uid,
+                "email": claims.get("email", f"{uid}@tripmate.ai"),
+                "role": claims.get("rol") or claims.get("role", "user"),
+            }
 
     # 2. Check if user-level API key was supplied (hashed SHA-256 match)
     if token:

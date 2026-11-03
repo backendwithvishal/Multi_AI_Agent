@@ -90,3 +90,128 @@ async def test_supervisor_agent_allowed(mock_routing, mock_guardrail):
     assert "hotel_agent" in res["selected_agents"]
     assert "itinerary_agent" in res["selected_agents"]
     assert res["trip_constraints"]["destination"] == "Paris"
+
+
+@pytest.mark.asyncio
+@patch("tripmate.graph.workflow.run_guardrail_check", new_callable=AsyncMock)
+async def test_supervisor_agent_blocked(mock_guardrail):
+    mock_guardrail.return_value = (False, "Request blocked due to dangerous keywords.")
+
+    state: TravelState = {
+        "user_query": "illegal instructions",
+        "messages": [],
+    }
+
+    res = await supervisor_agent(state)
+    assert res["status"] == "BLOCKED"
+    assert res["guardrail_allowed"] is False
+    assert res["guardrail_reason"] == "Request blocked due to dangerous keywords."
+    assert res["selected_agents"] == []
+
+
+@pytest.mark.asyncio
+async def test_critic_node():
+    from tripmate.graph.workflow import critic_node
+    from tripmate.schemas.agents import CriticReport
+
+    state: TravelState = {
+        "user_query": "Trip to Paris",
+        "trip_constraints": {"destination": "Paris"},
+        "flight_results": "Flight found",
+        "hotel_results": "Hotel found",
+        "metrics": {"agent_latencies": {}},
+    }
+
+    mock_report = CriticReport(
+        is_valid=True,
+        score=0.95,
+        violations=[],
+        recommendations=["Plan satisfies all constraints."],
+    )
+
+    with patch("tripmate.agents.critic.critic_agent.evaluate_plan", new_callable=AsyncMock) as mock_eval:
+        mock_eval.return_value = mock_report
+        res = await critic_node(state)
+        assert "critic_report" in res
+        assert res["critic_report"]["is_valid"] is True
+        assert res["critic_report"]["score"] == 0.95
+        assert "critic_agent" in res["metrics"]["agent_latencies"]
+
+
+@pytest.mark.asyncio
+async def test_itinerary_node():
+    from tripmate.graph.workflow import itinerary_node
+    from tripmate.schemas.agents import StructuredAgentOutput
+
+    state: TravelState = {
+        "user_query": "3 days in Paris",
+        "trip_constraints": {"destination": "Paris"},
+        "flight_results": "Air France 100",
+        "hotel_results": "Hotel Paris",
+        "metrics": {"agent_latencies": {}},
+    }
+
+    mock_out = StructuredAgentOutput(
+        agent_name="itinerary_agent",
+        status="success",
+        result="Day 1: Louvre. Day 2: Eiffel Tower. Day 3: Montmartre.",
+    )
+
+    with patch("tripmate.graph.workflow.itinerary_agent_obj.run", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = mock_out
+        res = await itinerary_node(state)
+        assert res["status"] == "WAITING_FOR_APPROVAL"
+        assert "Day 1: Louvre" in res["itinerary"]
+        assert "itinerary_agent" in res["metrics"]["agent_latencies"]
+
+
+@pytest.mark.asyncio
+async def test_human_approval_node_approved():
+    from tripmate.graph.workflow import human_approval_node
+
+    state: TravelState = {
+        "itinerary": "Draft itinerary",
+        "approval_request": "Please review",
+    }
+
+    with patch("tripmate.graph.workflow.interrupt") as mock_interrupt:
+        mock_interrupt.return_value = {"approved": True, "feedback": "Looks great!"}
+        res = await human_approval_node(state)
+        assert res["status"] == "APPROVED"
+        assert res["approved"] is True
+        assert res["human_feedback"] == "Looks great!"
+
+
+@pytest.mark.asyncio
+async def test_human_approval_node_rejected():
+    from tripmate.graph.workflow import human_approval_node
+
+    state: TravelState = {
+        "itinerary": "Draft itinerary",
+        "approval_request": "Please review",
+    }
+
+    with patch("tripmate.graph.workflow.interrupt") as mock_interrupt:
+        mock_interrupt.return_value = {"approved": False, "feedback": "Need cheaper hotels."}
+        res = await human_approval_node(state)
+        assert res["status"] == "REVISION_REQUESTED"
+        assert res["approved"] is False
+        assert res["human_feedback"] == "Need cheaper hotels."
+
+
+@pytest.mark.asyncio
+async def test_final_node():
+    from tripmate.graph.workflow import final_node
+
+    state: TravelState = {
+        "user_query": "Trip to Paris",
+        "itinerary": "Approved itinerary",
+        "metrics": {"agent_latencies": {}},
+    }
+
+    with patch("tripmate.graph.workflow.run_final_agent", new_callable=AsyncMock) as mock_final:
+        mock_final.return_value = "Your final travel itinerary for Paris is confirmed!"
+        res = await final_node(state)
+        assert res["status"] == "COMPLETED"
+        assert "confirmed" in res["final_response"]
+        assert "final_agent" in res["metrics"]["agent_latencies"]

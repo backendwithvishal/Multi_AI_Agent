@@ -236,11 +236,11 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
                 return user["id"]
         return None
 
-    async def _is_rate_limited_redis(self, client_ip: str, user_id: Optional[str] = None) -> Tuple[bool, int]:
+    async def _is_rate_limited_redis(self, client_ip: str, user_id: Optional[str] = None) -> Tuple[Optional[bool], int]:
         """Performs atomic distributed sliding window check using Redis pipeline."""
         from tripmate.cache.redis_cache import hybrid_cache
         if not hybrid_cache._use_redis or not hybrid_cache._redis_client:
-            return False, 0
+            return None, 0
 
         now = time.time()
         window_start = now - self.window_seconds
@@ -265,8 +265,9 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
                     retry_after = int(self.window_seconds - (now - oldest_entries[0][1])) if oldest_entries else 1
                     return True, max(1, retry_after)
             return False, 0
-        except Exception:
-            return False, 0  # Signal Redis error
+        except Exception as exc:
+            logger.warning(f"Redis rate limiter failed, falling back to in-memory: {exc}")
+            return None, 0
 
     def _is_rate_limited_in_memory(
         self,
@@ -301,10 +302,16 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
             from tripmate.cache.redis_cache import hybrid_cache
             redis_available = bool(hybrid_cache._use_redis and hybrid_cache._redis_client)
 
+            is_limited: Optional[bool] = None
+            retry_after: int = 0
             if redis_available:
-                is_limited, retry_after = await self._is_rate_limited_redis(client_ip, user_id=user_id)
-            else:
-                # Redis is down or unconfigured
+                try:
+                    is_limited, retry_after = await self._is_rate_limited_redis(client_ip, user_id=user_id)
+                except Exception:
+                    is_limited = None
+
+            if is_limited is None:
+                # Redis is down or unconfigured: fall back to in-memory rate limiter
                 if is_llm_route and not settings.FAIL_OPEN_REDIS:
                     # Fail-closed with emergency in-memory cap for LLM routes
                     limit_cap = settings.EMERGENCY_IN_MEMORY_RATE_LIMIT
@@ -340,6 +347,13 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
                     headers={"Retry-After": str(retry_after)},
                 )
 
-        return await call_next(request)
+        response = await call_next(request)
+        if any(path.startswith(prefix) for prefix in self.protected_prefixes):
+            client_ip = self._get_client_ip(request)
+            cur_reqs = len(self._requests.get(client_ip, []))
+            remaining = max(0, self.max_requests - cur_reqs)
+            response.headers["X-RateLimit-Limit"] = str(self.max_requests)
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+        return response
 
 
