@@ -1,3 +1,10 @@
+import os
+
+os.environ["APP_ENV"] = "test"
+os.environ["ENV"] = "test"
+os.environ["DATABASE_URL"] = ""
+os.environ["REDIS_URL"] = ""
+
 import gc
 import pytest
 from tripmate.middleware import SlidingWindowRateLimiter

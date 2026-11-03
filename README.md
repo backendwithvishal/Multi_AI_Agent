@@ -778,6 +778,14 @@ Registered task names: `watchlist_price_scan`, `background_itinerary`, `system_h
 
 ---
 
+### Metrics & Observability
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/metrics` | Prometheus exposition format metrics (protected by token or IP allowlist) |
+
+---
+
 ### Platform Administration
 
 All admin endpoints require `Authorization: Bearer <admin-token>`.

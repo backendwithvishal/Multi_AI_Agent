@@ -29,7 +29,8 @@ logger = logging.getLogger("tripmate.mcp_client")
 # =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
+if os.getenv("APP_ENV") not in ("test", "testing") and os.getenv("ENV") not in ("test", "testing"):
+    load_dotenv(BASE_DIR / ".env")
 
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()

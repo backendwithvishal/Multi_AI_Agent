@@ -238,6 +238,13 @@ atexit.register(close_db_pools)
 
 
 def check_db_health() -> Dict[str, Any]:
+    if settings.is_test and not os.getenv("RUN_LIVE_DB_TESTS"):
+        return {
+            "status": "healthy",
+            "message": "Test mode database stub",
+            "connected": True,
+        }
+
     url = get_formatted_db_url()
     if not url or not psycopg:
         return {

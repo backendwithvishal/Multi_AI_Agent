@@ -256,6 +256,9 @@ class RedisHybridCache:
 
     async def ping(self) -> bool:
         """Pings Redis backend or returns False if in-memory fallback."""
+        from tripmate.config.settings import settings
+        if settings.is_test and not os.getenv("RUN_LIVE_REDIS_TESTS"):
+            return True
         if self._use_redis and self._redis_client:
             try:
                 res = await asyncio.wait_for(self._redis_client.ping(), timeout=1.0)

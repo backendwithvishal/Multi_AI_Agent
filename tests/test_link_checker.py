@@ -43,6 +43,18 @@ _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)#\s]+)(?:#[^)]*)?\)")
 _MD_BADGE_PREFIXES = ("http://", "https://", "mailto:")
 
 
+def _resolve_target(md_file: Path, target: str) -> Path:
+    if target.startswith("file:///"):
+        raw = target[8:]
+        return Path(raw)
+    if target.startswith("file://"):
+        raw = target[7:]
+        return Path(raw)
+    if target.startswith("/"):
+        return (ROOT / target.lstrip("/")).resolve()
+    return (md_file.parent / target).resolve()
+
+
 def _check_markdown_links(md_file: Path) -> List[BrokenLink]:
     broken: List[BrokenLink] = []
     text = md_file.read_text(encoding="utf-8", errors="replace")
@@ -54,8 +66,7 @@ def _check_markdown_links(md_file: Path) -> List[BrokenLink]:
                 continue
             if target.startswith("#"):
                 continue
-            # Resolve relative to the markdown file's directory
-            resolved = (md_file.parent / target).resolve()
+            resolved = _resolve_target(md_file, target)
             if not resolved.exists():
                 broken.append(
                     BrokenLink(
@@ -75,36 +86,39 @@ def _collect_all_broken_links() -> List[BrokenLink]:
     return all_broken
 
 
-ALL_BROKEN = _collect_all_broken_links()
 ALL_MD_FILES = _collect_markdown_files()
 
 
 class TestMarkdownLinks:
     """All relative file references in Markdown files must resolve to real files."""
 
-    @pytest.mark.skipif(not ALL_BROKEN, reason="No broken links found — all clear")
     @pytest.mark.parametrize(
-        "broken",
-        ALL_BROKEN,
-        ids=[f"{b.source_file}:L{b.line_number}:{b.link_target}" for b in ALL_BROKEN],
+        "md_file",
+        ALL_MD_FILES,
+        ids=[str(f.relative_to(ROOT)) for f in ALL_MD_FILES],
     )
-    def test_no_broken_links(self, broken: BrokenLink):
-        pytest.fail(
-            f"Broken link in {broken.source_file} line {broken.line_number}: "
-            f"{broken.link_target!r} — {broken.reason}"
-        )
+    def test_file_has_no_broken_links(self, md_file: Path):
+        broken = _check_markdown_links(md_file)
+        if broken:
+            details = "\n".join(
+                f"  L{b.line_number}: {b.link_target!r} ({b.reason})" for b in broken
+            )
+            pytest.fail(f"Found broken link(s) in {md_file.relative_to(ROOT)}:\n{details}")
 
     def test_all_markdown_files_parsed(self):
         """Sanity: at least README.md must be found."""
         file_names = [f.name for f in ALL_MD_FILES]
         assert "README.md" in file_names, "README.md not found during markdown scan"
+        assert len(ALL_MD_FILES) >= 5, f"Expected at least 5 markdown files, got {len(ALL_MD_FILES)}"
 
     def test_link_scan_summary(self, capsys):
         """Print a summary of checked files and broken link count."""
+        all_broken = _collect_all_broken_links()
         with capsys.disabled():
             print(
                 f"\n[link-checker] Scanned {len(ALL_MD_FILES)} markdown files, "
-                f"found {len(ALL_BROKEN)} broken link(s)."
+                f"found {len(all_broken)} broken link(s)."
             )
-        assert True  # always pass; broken links are reported individually above
+        assert len(all_broken) == 0, f"Found {len(all_broken)} broken links total across all markdown files"
+
 

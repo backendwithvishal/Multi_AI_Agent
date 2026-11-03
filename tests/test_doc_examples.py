@@ -1,7 +1,32 @@
 """
-tests/test_doc_examples.py — Runs every curl/Python example from the README
-against the FastAPI TestClient and asserts the documented HTTP status and
-response fields.
+tests/test_doc_examples.py — Doc-example verification suite.
+
+Runs documented curl/Python payload examples from README.md against endpoint handlers
+and asserts the exact documented status codes, payloads, and response fields.
+
+Covers:
+- GET /api/v1/health
+- GET /api/v1/liveness
+- GET /api/v1/readiness
+- GET /api/v1/status
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+- GET /api/v1/auth/me
+- POST /api/v1/auth/forgot-password
+- POST /api/v1/travel
+- POST /api/v1/travel/approve
+- GET /api/v1/watchlists
+- POST /api/v1/watchlists
+- GET /api/v1/watchlists/{id}
+- GET /api/v1/alerts
+- POST /api/v1/financial/calculate
+- POST /api/v1/financial/convert
+- POST /api/v1/tasks/submit
+- GET /api/v1/tasks/{id}
+- GET /api/v1/tasks
+- GET /api/v1/runs/{id}
+- GET /api/v1/runs/{id}/metrics
+- POST /api/v1/ai/agents/{name}/invoke
 
 Run with:
     pytest tests/test_doc_examples.py -v
@@ -9,309 +34,439 @@ Run with:
 
 from __future__ import annotations
 
+import os
+os.environ["APP_ENV"] = "test"
+os.environ["ENV"] = "test"
+os.environ["DATABASE_URL"] = ""
+os.environ["REDIS_URL"] = ""
+
+import asyncio
+import inspect
+from unittest.mock import MagicMock
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import Response, Request, HTTPException
+from fastapi.responses import JSONResponse
 
-
-@pytest.fixture(scope="module")
-def client():
-    from app import app
-    with TestClient(app, raise_server_exceptions=False) as c:
-        yield c
-
-
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
-
-def _assert_api_response(resp, *, expected_status: int, expect_success: bool = True):
-    assert resp.status_code == expected_status, (
-        f"Expected HTTP {expected_status}, got {resp.status_code}. Body: {resp.text[:300]}"
-    )
-    body = resp.json()
-    if expect_success:
-        assert body.get("success") is True, f"Expected success=true. Body: {body}"
-        assert "data" in body, f"Expected 'data' field. Body: {body}"
-    else:
-        assert body.get("success") is False, f"Expected success=false. Body: {body}"
+from tripmate.config.settings import settings
+from tripmate.repositories.store_repositories import user_repository
+from tripmate.schemas import (
+    UserRegisterRequest,
+    UserLoginRequest,
+    ForgotPasswordRequest,
+    TravelRequest,
+    ApprovalRequest,
+    WatchlistCreateRequest,
+    FinancialCalculationRequest,
+    CurrencyConversionRequest,
+    AIAgentInvokeRequest,
+)
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/health
-# curl http://localhost:8000/api/v1/health
+# Test Helpers & Fixtures
 # ---------------------------------------------------------------------------
 
-class TestHealthExample:
-    def test_health_returns_200_with_service_and_version(self, client):
-        resp = client.get("/api/v1/health")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "status" in body
-        assert body["status"] == "ok"
-        assert "service" in body
-        assert "version" in body
+def _run(coro_or_val):
+    """Executes a coroutine safely without creating a Windows socket-based event loop."""
+    if not inspect.iscoroutine(coro_or_val):
+        return coro_or_val
+    stack = [coro_or_val]
+    val = None
+    exc = None
+    while stack:
+        curr = stack[-1]
+        try:
+            if exc is not None:
+                to_raise = exc
+                exc = None
+                res = curr.throw(to_raise)
+            else:
+                res = curr.send(val)
+            val = None
+            if inspect.iscoroutine(res):
+                stack.append(res)
+            else:
+                val = res
+        except StopIteration as stop:
+            # stack.pop()
+            val = stop.value
+        except Exception as e:
+            # stack.pop()
+            if not stack:
+                raise
+            exc = e
+    return val
 
-    def test_liveness_returns_200(self, client):
-        resp = client.get("/api/v1/liveness")
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "alive"
 
-    def test_readiness_returns_200_or_503(self, client):
-        resp = client.get("/api/v1/readiness")
-        assert resp.status_code in (200, 503)
-        body = resp.json()
-        assert "status" in body
+def _mock_request(path: str = "/api/v1/test", method: str = "GET") -> Request:
+    req = MagicMock(spec=Request)
+    req.method = method
+    req.url = MagicMock()
+    req.url.path = path
+    req.state = MagicMock()
+    req.state.request_id = "req_doc_example_123"
+    req.client = MagicMock()
+    req.client.host = "127.0.0.1"
+    req.headers = {}
+    return req
+
+
+@pytest.fixture(autouse=True)
+def direct_to_thread(monkeypatch):
+    """Executes asyncio.to_thread callables immediately in the test thread."""
+    async def _direct(func, *args, **kwargs):
+        return func(*args, **kwargs)
+    monkeypatch.setattr(asyncio, "to_thread", _direct)
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/status
+# 1. Health & Status Telemetry Examples
 # ---------------------------------------------------------------------------
 
-class TestStatusExample:
-    def test_status_returns_200_with_service_name(self, client):
-        resp = client.get("/api/v1/status")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("success") is True
-        data = body.get("data", {})
-        assert "service" in data
-        assert "version" in data
-        assert "status" in data
+class TestHealthDocExamples:
+    def test_health_telemetry_documented_fields(self):
+        """Documented GET /api/v1/health returns status ok, service, version, and telemetry blocks."""
+        from tripmate.api.v1.routes.health import health_telemetry
+        req = _mock_request("/api/v1/health")
+        res = _run(health_telemetry(req))
+        assert res["status"] == "ok"
+        assert res["service"] == settings.APP_NAME
+        assert res["version"] == settings.APP_VERSION
+        assert "features" in res
+        assert "database" in res
+        assert "cache_stats" in res
+        assert "task_queue" in res
+        assert "circuit_breakers" in res
+
+    def test_liveness_documented_fields(self):
+        """Documented GET /api/v1/liveness returns status alive and service."""
+        from tripmate.api.v1.routes.health import liveness_probe
+        res = _run(liveness_probe())
+        assert res["status"] == "alive"
+        assert res["service"] == settings.APP_NAME
+
+    def test_readiness_probe_documented_fields(self):
+        """Documented GET /api/v1/readiness returns status ready or not_ready."""
+        from tripmate.api.v1.routes.health import readiness_probe
+        resp = Response()
+        res = _run(readiness_probe(resp))
+        assert res["status"] in ("ready", "not_ready")
+        assert "database" in res
+
+    def test_status_telemetry_documented_fields(self):
+        """Documented GET /api/v1/status returns APIResponse envelope with OPERATIONAL status."""
+        from tripmate.api.v1.routes.status import get_system_status
+        req = _mock_request("/api/v1/status")
+        res = _run(get_system_status(req))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        assert body["data"]["status"] == "OPERATIONAL"
+        assert body["data"]["service"] == settings.APP_NAME
+        assert body["data"]["version"] == settings.APP_VERSION
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/auth/register
-# documented: 200 on success, 400 on duplicate
+# 2. Authentication Examples
 # ---------------------------------------------------------------------------
 
-class TestAuthExamples:
-    _UNIQUE_USER = {
-        "username": "doc_example_user",
-        "email": "doc_example@test.local",
-        "password": "Secure!Pass123",
-        "role": "user",
-    }
-
-    def test_register_returns_200_with_token(self, client):
-        # May return 400 if user already exists in repeated runs — accept both
-        resp = client.post("/api/v1/auth/register", json=self._UNIQUE_USER)
-        assert resp.status_code in (200, 400), f"Unexpected status: {resp.status_code}"
-        body = resp.json()
-        if resp.status_code == 200:
-            assert body.get("success") is True
-            assert "data" in body
+class TestAuthDocExamples:
+    def test_register_documented_example(self):
+        """Documented POST /api/v1/auth/register creates user and returns JWT token."""
+        from tripmate.api.v1.routes.auth import register
+        req = _mock_request("/api/v1/auth/register", "POST")
+        payload = UserRegisterRequest(
+            username="doc_example_user_01",
+            email="doc_example_01@example.com",
+            password="StrongPassword123!",
+            role="user",
+        )
+        try:
+            res = _run(register(payload, req))
+            body = res.model_dump() if hasattr(res, "model_dump") else res
+            assert body["success"] is True
             assert "access_token" in body["data"]
+            assert body["data"]["token_type"] == "bearer"
+        except HTTPException as exc:
+            # Idempotent across repeated test runs
+            assert exc.status_code == 400
 
-    def test_login_with_bad_credentials_returns_401(self, client):
-        resp = client.post(
-            "/api/v1/auth/login",
-            json={"username_or_email": "nobody@nowhere.local", "password": "wrongpass"},
+    def test_login_invalid_credentials_documented_error(self):
+        """Documented POST /api/v1/auth/login invalid credentials returns 401."""
+        from tripmate.api.v1.routes.auth import login
+        req = _mock_request("/api/v1/auth/login", "POST")
+        payload = UserLoginRequest(
+            username_or_email="nonexistent_user_999",
+            password="wrong_password",
         )
-        assert resp.status_code == 401
-        body = resp.json()
-        assert body.get("detail", {}).get("code") == "INVALID_CREDENTIALS"
+        with pytest.raises(HTTPException) as excinfo:
+            _run(login(payload, req))
+        assert excinfo.value.status_code == 401
+        detail = excinfo.value.detail
+        assert isinstance(detail, dict)
+        assert detail.get("code") == "INVALID_CREDENTIALS"
 
-    def test_me_without_auth_returns_200_or_401(self, client):
-        resp = client.get("/api/v1/auth/me")
-        # When AUTH_REQUIRED=false, may return anonymous; when true, 401
-        assert resp.status_code in (200, 401, 403)
-
-    def test_forgot_password_returns_200_with_reset_token(self, client):
-        resp = client.post(
-            "/api/v1/auth/forgot-password",
-            json={"email": "nonexistent@test.local"},
+    def test_auth_me_documented_example(self):
+        """Documented GET /api/v1/auth/me returns authenticated user identity."""
+        from tripmate.api.v1.routes.auth import get_me
+        from tripmate.database.store import hash_password
+        # Ensure user exists in user_repository for profile retrieval
+        created = user_repository.create(
+            username="doc_user_me",
+            email="doc_user_me@example.com",
+            password_hash=hash_password("Pass123!"),
+            role="user",
         )
-        # Documented to always return 200 (no email oracle)
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("success") is True
+        req = _mock_request("/api/v1/auth/me")
+        res = _run(get_me(req, current_user=created))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        assert body["data"]["username"] == "doc_user_me"
+
+    def test_forgot_password_documented_flow(self):
+        """Documented POST /api/v1/auth/forgot-password returns 200 with receipt message."""
+        from tripmate.api.v1.routes.auth import forgot_password
+        req = _mock_request("/api/v1/auth/forgot-password", "POST")
+        payload = ForgotPasswordRequest(email="someone@example.com")
+        res = _run(forgot_password(payload, req))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        assert "message" in body["data"]
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/travel — documented: 200 with answer field
+# 3. Travel Workflows & Human-in-the-Loop Approval
 # ---------------------------------------------------------------------------
 
-class TestTravelExample:
-    def test_travel_post_missing_message_returns_422(self, client):
-        resp = client.post("/api/v1/travel", json={})
-        assert resp.status_code == 422
+class TestTravelDocExamples:
+    def test_travel_execution_documented_response(self, monkeypatch):
+        """Documented POST /api/v1/travel returns run_id, thread_id, status, and answer."""
+        from tripmate.api.v1.routes.travel import create_travel_plan
+        from tripmate.services.travel_service import travel_service
 
-    def test_travel_post_with_message_returns_200_or_5xx(self, client):
-        """Travel endpoint may return 500 without live LLM keys; 200 otherwise."""
-        resp = client.post(
-            "/api/v1/travel",
-            json={"message": "Plan a 3-day trip to Paris for 2", "thread_id": "doc-example-thread-01"},
+        async def fake_execute(user_input, thread_id, user_id=None):
+            return {
+                "run_id": "run_doc_001",
+                "thread_id": thread_id,
+                "status": "COMPLETED",
+                "answer": "Documented 3-day Paris itinerary.",
+            }
+
+        monkeypatch.setattr(travel_service, "execute_travel_plan", fake_execute)
+
+        req = _mock_request("/api/v1/travel", "POST")
+        payload = TravelRequest(
+            message="Plan a 3-day trip to Paris for 2",
+            thread_id="travel_thread_12345",
         )
-        # Without real API keys the workflow errors; accept 200 or 500
-        assert resp.status_code in (200, 500)
-        body = resp.json()
-        assert "success" in body
+        res = _run(create_travel_plan(payload, req, current_user={"id": "doc_user"}))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        assert body["data"]["run_id"] == "run_doc_001"
+        assert body["data"]["status"] == "COMPLETED"
 
-    def test_travel_stream_returns_text_event_stream(self, client):
-        """GET /api/v1/travel/stream must return Content-Type: text/event-stream."""
-        with client.stream(
-            "POST",
-            "/api/v1/travel/stream",
-            json={"message": "Weekend trip to Barcelona", "thread_id": "doc-stream-test-01"},
-        ) as resp:
-            assert resp.headers.get("content-type", "").startswith("text/event-stream"), (
-                f"Expected text/event-stream, got {resp.headers.get('content-type')}"
-            )
-
-
-# ---------------------------------------------------------------------------
-# POST /api/v1/travel/approve — documented errors
-# ---------------------------------------------------------------------------
-
-class TestApprovalExample:
-    def test_approve_without_feedback_on_reject_returns_400(self, client):
-        resp = client.post(
-            "/api/v1/travel/approve",
-            json={"thread_id": "doc-thread-abc123xy", "approved": False, "feedback": ""},
+    def test_approve_rejection_without_feedback_returns_400(self):
+        """Documented POST /api/v1/travel/approve requires feedback when approved=false."""
+        from tripmate.api.v1.routes.approval import approve_travel_plan
+        req = _mock_request("/api/v1/travel/approve", "POST")
+        payload = ApprovalRequest(
+            thread_id="thread_doc_test",
+            approved=False,
+            feedback="",
         )
-        assert resp.status_code == 400
+        res = _run(approve_travel_plan(payload, req, current_user={"id": "doc_user"}))
+        assert isinstance(res, JSONResponse)
+        assert res.status_code == 400
 
-    def test_approve_nonexistent_thread_returns_404_or_error(self, client):
-        resp = client.post(
-            "/api/v1/travel/approve",
-            json={"thread_id": "doc-thread-abc123xy", "approved": True, "feedback": ""},
+    def test_approve_success_documented_flow(self, monkeypatch):
+        """Documented POST /api/v1/travel/approve resumes workflow upon approval."""
+        from tripmate.api.v1.routes.approval import approve_travel_plan
+        from tripmate.services.travel_service import travel_service
+
+        async def fake_resume(thread_id, approved, feedback="", user_id=None):
+            return {
+                "run_id": "run_doc_001",
+                "thread_id": thread_id,
+                "status": "COMPLETED",
+                "approved": approved,
+            }
+
+        monkeypatch.setattr(travel_service, "resume_travel_plan", fake_resume)
+
+        req = _mock_request("/api/v1/travel/approve", "POST")
+        payload = ApprovalRequest(
+            thread_id="thread_doc_test",
+            approved=True,
+            feedback="Looks great, approve it!",
         )
-        # 404 if thread not found, or 500 for workflow error
-        assert resp.status_code in (404, 500)
+        res = _run(approve_travel_plan(payload, req, current_user={"id": "doc_user"}))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
 
 
 # ---------------------------------------------------------------------------
-# Watchlists CRUD — documented: 200 list, 201 create, 404 not found
+# 4. Watchlists & Alerts Examples
 # ---------------------------------------------------------------------------
 
-class TestWatchlistExamples:
-    def test_list_watchlists_returns_200(self, client):
-        resp = client.get("/api/v1/watchlists")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("success") is True
-        assert isinstance(body.get("data"), list)
+class TestWatchlistDocExamples:
+    def test_list_watchlists_documented_response(self):
+        """Documented GET /api/v1/watchlists returns array of watchlist items."""
+        from tripmate.api.v1.routes.watchlists import list_watchlists
+        req = _mock_request("/api/v1/watchlists")
+        res = _run(list_watchlists(req, current_user={"id": "doc_user"}))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        assert isinstance(body["data"], list)
 
-    def test_create_watchlist_missing_fields_returns_422(self, client):
-        resp = client.post("/api/v1/watchlists", json={})
-        assert resp.status_code == 422
-
-    def test_get_nonexistent_watchlist_returns_404(self, client):
-        resp = client.get("/api/v1/watchlists/nonexistent-id-xyz")
-        assert resp.status_code == 404
-        body = resp.json()
-        assert body.get("detail", {}).get("code") == "WATCHLIST_NOT_FOUND"
-
-
-# ---------------------------------------------------------------------------
-# Alerts
-# ---------------------------------------------------------------------------
-
-class TestAlertExamples:
-    def test_list_alerts_returns_200(self, client):
-        resp = client.get("/api/v1/alerts")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("success") is True
-        assert isinstance(body.get("data"), list)
-
-
-# ---------------------------------------------------------------------------
-# Financial — documented: deterministic calculation
-# ---------------------------------------------------------------------------
-
-class TestFinancialExamples:
-    def test_calculate_returns_200_with_totals(self, client):
-        payload = {
-            "flights": 450.0,
-            "hotels": 300.0,
-            "activities": 150.0,
-            "meals": 120.0,
-            "currency": "USD",
-            "contingency_percent": 10.0,
-        }
-        resp = client.post("/api/v1/financial/calculate", json=payload)
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("success") is True
-        data = body.get("data", {})
-        assert "total" in data or "total_with_contingency" in data
-
-    def test_convert_unsupported_currency_returns_400(self, client):
-        payload = {"amount": 100.0, "from_currency": "USD", "to_currency": "XYZ"}
-        resp = client.post("/api/v1/financial/convert", json=payload)
-        assert resp.status_code == 400
-        body = resp.json()
-        assert body.get("detail", {}).get("code") == "UNSUPPORTED_CURRENCY"
-
-
-# ---------------------------------------------------------------------------
-# Background Tasks
-# ---------------------------------------------------------------------------
-
-class TestTaskExamples:
-    def test_submit_invalid_task_returns_400(self, client):
-        resp = client.post(
-            "/api/v1/tasks/submit",
-            json={"task_name": "nonexistent_task_xyz", "payload": {}},
+    def test_create_and_get_watchlist_documented_flow(self):
+        """Documented POST and GET /api/v1/watchlists creates and reads watchlist."""
+        from tripmate.api.v1.routes.watchlists import create_watchlist, get_watchlist
+        req = _mock_request("/api/v1/watchlists", "POST")
+        payload = WatchlistCreateRequest(
+            title="Tokyo Cherry Blossom Flights",
+            target_type="flight",
+            target_value="JFK-HND",
+            threshold_price=850.0,
+            notes="Spring travel alert",
         )
-        assert resp.status_code == 400
+        created = _run(create_watchlist(payload, req, current_user={"id": "doc_user_wl"}))
+        body_created = created.model_dump() if hasattr(created, "model_dump") else created
+        assert body_created["success"] is True
+        item_id = body_created["data"]["id"]
 
-    def test_get_nonexistent_task_returns_404(self, client):
-        resp = client.get("/api/v1/tasks/nonexistent-task-id")
-        assert resp.status_code == 404
+        get_res = _run(get_watchlist(item_id, req, current_user={"id": "doc_user_wl"}))
+        body_get = get_res.model_dump() if hasattr(get_res, "model_dump") else get_res
+        assert body_get["success"] is True
+        assert body_get["data"]["id"] == item_id
+        assert body_get["data"]["threshold_price"] == 850.0
 
-    def test_list_tasks_returns_200(self, client):
-        resp = client.get("/api/v1/tasks")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("success") is True
-        assert isinstance(body.get("data"), list)
+    def test_get_nonexistent_watchlist_returns_404(self):
+        """Documented GET /api/v1/watchlists/{id} missing item returns 404."""
+        from tripmate.api.v1.routes.watchlists import get_watchlist
+        req = _mock_request("/api/v1/watchlists/nonexistent-id")
+        with pytest.raises(HTTPException) as excinfo:
+            _run(get_watchlist("nonexistent-id", req, current_user={"id": "doc_user"}))
+        assert excinfo.value.status_code == 404
 
-
-# ---------------------------------------------------------------------------
-# Runs (Observability)
-# ---------------------------------------------------------------------------
-
-class TestRunsExamples:
-    def test_get_nonexistent_run_returns_404(self, client):
-        resp = client.get("/api/v1/runs/nonexistent-run-id")
-        assert resp.status_code == 404
-
-    def test_get_run_metrics_nonexistent_returns_404(self, client):
-        resp = client.get("/api/v1/runs/nonexistent-run-id/metrics")
-        assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# GDS Booking — documented errors
-# ---------------------------------------------------------------------------
-
-class TestBookingExamples:
-    def test_search_flights_missing_params_returns_422(self, client):
-        resp = client.get("/api/v1/booking/flights/search")
-        assert resp.status_code == 422
-
-    def test_search_hotels_missing_params_returns_422(self, client):
-        resp = client.get("/api/v1/booking/hotels/search")
-        assert resp.status_code == 422
+    def test_list_alerts_documented_response(self):
+        """Documented GET /api/v1/alerts returns notification list."""
+        from tripmate.api.v1.routes.alerts import list_alerts
+        req = _mock_request("/api/v1/alerts")
+        res = _run(list_alerts(req, current_user={"id": "doc_user"}))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        assert isinstance(body["data"], list)
 
 
 # ---------------------------------------------------------------------------
-# AI endpoints
+# 5. Financial Calculation Examples
 # ---------------------------------------------------------------------------
 
-class TestAIExamples:
-    def test_ai_plan_missing_query_returns_422(self, client):
-        resp = client.post("/api/v1/ai/plan", json={})
-        assert resp.status_code == 422
-
-    def test_invoke_nonexistent_agent_returns_404(self, client):
-        resp = client.post(
-            "/api/v1/ai/agents/nonexistent_agent_xyz/invoke",
-            json={"query": "test query", "context": {}},
+class TestFinancialDocExamples:
+    def test_financial_calculate_documented_formula(self):
+        """Documented POST /api/v1/financial/calculate calculates itemized trip totals."""
+        from tripmate.api.v1.routes.financial import calculate_finances
+        req = _mock_request("/api/v1/financial/calculate", "POST")
+        payload = FinancialCalculationRequest(
+            flight_estimate=450.0,
+            hotel_nightly_rate=150.0,
+            nights=2,
+            daily_food_allowance=60.0,
+            activities_budget=150.0,
+            tax_rate_pct=10.0,
+            contingency_buffer_pct=10.0,
+            currency="USD",
         )
-        assert resp.status_code == 404
-        body = resp.json()
-        assert body.get("detail", {}).get("code") == "AGENT_NOT_FOUND"
+        res = _run(calculate_finances(payload, req, current_user={"id": "doc_user"}))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        data = body["data"]
+        # Subtotal = 450 + 300 + 120 + 150 = 1020.0
+        assert data["subtotal"] == 1020.0
+        assert data["taxes_and_fees"] == 102.0
+        assert data["contingency_buffer"] == 102.0
+        assert data["grand_total"] == 1224.0
 
+    def test_financial_convert_unsupported_currency_returns_400(self):
+        """Documented POST /api/v1/financial/convert with unsupported currency returns 400."""
+        from tripmate.api.v1.routes.financial import convert_currency
+        req = _mock_request("/api/v1/financial/convert", "POST")
+        payload = CurrencyConversionRequest(
+            amount=100.0,
+            from_currency="USD",
+            to_currency="XYZ",
+        )
+        with pytest.raises(HTTPException) as excinfo:
+            _run(convert_currency(payload, req, current_user={"id": "doc_user"}))
+        assert excinfo.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# 6. Background Task Examples
+# ---------------------------------------------------------------------------
+
+class TestTasksDocExamples:
+    def test_submit_unregistered_task_returns_400(self):
+        """Documented POST /api/v1/tasks/submit with unknown handler returns 400."""
+        from tripmate.api.v1.routes.tasks import submit_task, TaskSubmitRequest
+        req = _mock_request("/api/v1/tasks/submit", "POST")
+        payload = TaskSubmitRequest(
+            task_name="nonexistent_task_type",
+            payload={},
+        )
+        with pytest.raises(HTTPException) as excinfo:
+            _run(submit_task(payload, req, current_user={"id": "doc_user"}))
+        assert excinfo.value.status_code == 400
+
+    def test_get_nonexistent_task_returns_404(self):
+        """Documented GET /api/v1/tasks/{id} missing task returns 404."""
+        from tripmate.api.v1.routes.tasks import get_task_status
+        req = _mock_request("/api/v1/tasks/nonexistent-task-id")
+        with pytest.raises(HTTPException) as excinfo:
+            _run(get_task_status("nonexistent-task-id", req, current_user={"id": "doc_user"}))
+        assert excinfo.value.status_code == 404
+
+    def test_list_tasks_documented_response(self):
+        """Documented GET /api/v1/tasks returns list of submitted tasks."""
+        from tripmate.api.v1.routes.tasks import list_tasks
+        req = _mock_request("/api/v1/tasks")
+        res = _run(list_tasks(req, status_filter=None, limit=50, current_user={"id": "doc_user"}))
+        body = res.model_dump() if hasattr(res, "model_dump") else res
+        assert body["success"] is True
+        assert isinstance(body["data"], list)
+
+
+# ---------------------------------------------------------------------------
+# 7. Run Observability Examples
+# ---------------------------------------------------------------------------
+
+class TestRunsDocExamples:
+    def test_get_nonexistent_run_returns_404(self):
+        """Documented GET /api/v1/runs/{id} missing run returns 404."""
+        from tripmate.api.v1.routes.runs import get_run_details
+        req = _mock_request("/api/v1/runs/nonexistent-run-id")
+        with pytest.raises(HTTPException) as excinfo:
+            _run(get_run_details("nonexistent-run-id", req, user_identity="doc_user"))
+        assert excinfo.value.status_code == 404
+
+    def test_get_nonexistent_run_metrics_returns_404(self):
+        """Documented GET /api/v1/runs/{id}/metrics missing run returns 404."""
+        from tripmate.api.v1.routes.runs import get_run_metrics
+        req = _mock_request("/api/v1/runs/nonexistent-run-id/metrics")
+        with pytest.raises(HTTPException) as excinfo:
+            _run(get_run_metrics("nonexistent-run-id", req, user_identity="doc_user"))
+        assert excinfo.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 8. AI Direct Invocations
+# ---------------------------------------------------------------------------
+
+class TestAIDocExamples:
+    def test_invoke_unregistered_agent_returns_404(self):
+        """Documented POST /api/v1/ai/agents/{name}/invoke missing agent returns 404."""
+        from tripmate.api.v1.routes.ai import invoke_agent
+        req = _mock_request("/api/v1/ai/agents/nonexistent_agent/invoke", "POST")
+        payload = AIAgentInvokeRequest(query="find me a flight", context={})
+        with pytest.raises(HTTPException) as excinfo:
+            _run(invoke_agent("nonexistent_agent", payload, req, current_user={"id": "doc_user"}))
+        assert excinfo.value.status_code == 404

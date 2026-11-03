@@ -14,14 +14,14 @@ This audit evaluates the codebase against production-grade AI platform standards
 
 | Layer | Implementation Details | Location |
 |---|---|---|
-| **Entry Point & API Gateway** | FastAPI with middleware pipeline (Security Headers, Correlation ID, Rate Limiter, CORS) | [app.py](file:///d:/Multi_AI_Agent/app.py) |
-| **Routes** | Versioned `/api/v1` routes (`/travel`, `/travel/stream`, `/travel/approve`, `/health`, `/liveness`, `/readiness`) + legacy aliases | [tripmate/api/v1/routes](file:///d:/Multi_AI_Agent/tripmate/api/v1/routes) |
-| **Orchestration** | LangGraph `StateGraph(TravelState)` with static node transitions | [tripmate/graph/workflow.py](file:///d:/Multi_AI_Agent/tripmate/graph/workflow.py) |
-| **Agent Layer** | Function-based agents (`supervisor`, `flight_agent`, `hotel_agent`, `weather_agent`, `budget_agent`, `itinerary_agent`, `final_agent`) | [tripmate/agents](file:///d:/Multi_AI_Agent/tripmate/agents) |
-| **MCP Integration** | Multi-server client managing Tavily (HTTP streamable), AviationStack (stdio via `uvx`), and OpenWeather (stdio FastMCP) | [mcp_client.py](file:///d:/Multi_AI_Agent/mcp_client.py), [tripmate/integrations/mcp.py](file:///d:/Multi_AI_Agent/tripmate/integrations/mcp.py) |
-| **Resilience & Caching** | Custom `CircuitBreaker` pattern and single-flight async `BoundedAsyncTTLCache` | [tripmate/integrations/circuit_breaker.py](file:///d:/Multi_AI_Agent/tripmate/integrations/circuit_breaker.py), [tripmate/cache/ttl_cache.py](file:///d:/Multi_AI_Agent/tripmate/cache/ttl_cache.py) |
-| **Persistence** | LangGraph `PostgresSaver` with automatic fallback to `MemorySaver` in development | [tripmate/database/__init__.py](file:///d:/Multi_AI_Agent/tripmate/database/__init__.py) |
-| **Containerization** | Multi-stage `Dockerfile` and local `docker-compose.yml` (API + Postgres 15) | [Dockerfile](file:///d:/Multi_AI_Agent/Dockerfile), [docker-compose.yml](file:///d:/Multi_AI_Agent/docker-compose.yml) |
+| **Entry Point & API Gateway** | FastAPI with middleware pipeline (Security Headers, Correlation ID, Rate Limiter, CORS) | [app.py](file:///d:/AI_Project/Multi_AI_Agent/app.py) |
+| **Routes** | Versioned `/api/v1` routes (`/travel`, `/travel/stream`, `/travel/approve`, `/health`, `/liveness`, `/readiness`) + legacy aliases | [tripmate/api/v1/routes](file:///d:/AI_Project/Multi_AI_Agent/tripmate/api/v1/routes) |
+| **Orchestration** | LangGraph `StateGraph(TravelState)` with static node transitions | [tripmate/graph/workflow.py](file:///d:/AI_Project/Multi_AI_Agent/tripmate/graph/workflow.py) |
+| **Agent Layer** | Function-based agents (`supervisor`, `flight_agent`, `hotel_agent`, `weather_agent`, `budget_agent`, `itinerary_agent`, `final_agent`) | [tripmate/agents](file:///d:/AI_Project/Multi_AI_Agent/tripmate/agents) |
+| **MCP Integration** | Multi-server client managing Tavily (HTTP streamable), AviationStack (stdio via `uvx`), and OpenWeather (stdio FastMCP) | [mcp_client.py](file:///d:/AI_Project/Multi_AI_Agent/mcp_client.py), [tripmate/integrations/mcp.py](file:///d:/AI_Project/Multi_AI_Agent/tripmate/integrations/mcp.py) |
+| **Resilience & Caching** | Custom `CircuitBreaker` pattern and single-flight async `BoundedAsyncTTLCache` | [tripmate/integrations/circuit_breaker.py](file:///d:/AI_Project/Multi_AI_Agent/tripmate/integrations/circuit_breaker.py), [tripmate/cache/ttl_cache.py](file:///d:/AI_Project/Multi_AI_Agent/tripmate/cache/ttl_cache.py) |
+| **Persistence** | LangGraph `PostgresSaver` with automatic fallback to `MemorySaver` in development | [tripmate/database/__init__.py](file:///d:/AI_Project/Multi_AI_Agent/tripmate/database/__init__.py) |
+| **Containerization** | Multi-stage `Dockerfile` and local `docker-compose.yml` (API + Postgres 15) | [Dockerfile](file:///d:/AI_Project/Multi_AI_Agent/Dockerfile), [docker-compose.yml](file:///d:/AI_Project/Multi_AI_Agent/docker-compose.yml) |
 
 ---
 

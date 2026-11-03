@@ -19,7 +19,8 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-load_dotenv(BASE_DIR / ".env")
+if os.getenv("APP_ENV") not in ("test", "testing") and os.getenv("ENV") not in ("test", "testing"):
+    load_dotenv(BASE_DIR / ".env")
 
 
 def _get_version() -> str:
@@ -248,7 +249,15 @@ class Settings(BaseSettings):
 
         # Synchronize ENV and APP_ENV: explicit constructor values take highest precedence
         explicit_env = values.get("APP_ENV") or values.get("ENV")
-        env_from_os = (explicit_env or os.getenv("ENV") or os.getenv("APP_ENV") or self.ENV or self.APP_ENV).strip().lower()
+        raw_env = (
+            explicit_env
+            or ("test" if (os.getenv("APP_ENV") in ("test", "testing") or os.getenv("ENV") in ("test", "testing")) else None)
+            or os.getenv("ENV")
+            or os.getenv("APP_ENV")
+            or self.ENV
+            or self.APP_ENV
+        )
+        env_from_os = (raw_env or "dev").strip().lower()
         if env_from_os in ("prod", "production"):
             self.APP_ENV = "production"
             self.ENV = "prod"
@@ -348,8 +357,11 @@ class Settings(BaseSettings):
         return (
             self.APP_ENV in ("test", "testing")
             or self.ENV in ("test", "testing")
+            or os.getenv("APP_ENV") in ("test", "testing")
+            or os.getenv("ENV") in ("test", "testing")
             or "pytest" in sys.modules
             or "PYTEST_CURRENT_TEST" in os.environ
+            or any("pytest" in str(arg).lower() for arg in sys.argv)
         )
 
     def validate_production(self) -> None:
