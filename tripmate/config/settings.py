@@ -11,6 +11,7 @@ Built on pydantic-settings with strict validation:
 """
 
 import os
+from importlib.metadata import version as _pkg_version, PackageNotFoundError
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from dotenv import load_dotenv
@@ -19,6 +20,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / ".env")
+
+
+def _get_version() -> str:
+    """Single-source of truth: reads version from pyproject.toml via importlib.metadata.
+    Falls back to reading pyproject.toml directly if the package is not installed.
+    """
+    try:
+        return _pkg_version("multi-ai-agent")
+    except PackageNotFoundError:
+        pass
+    try:
+        import tomllib  # Python 3.11+
+        toml_path = BASE_DIR / "pyproject.toml"
+        with open(toml_path, "rb") as fh:
+            data = tomllib.load(fh)
+        return data["project"]["version"]
+    except Exception:
+        return "3.0.0"  # fallback
 
 
 # =========================================================
@@ -108,8 +127,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    APP_NAME: str = "TripMate AI Multi-Agent Backend Engine"
-    APP_VERSION: str = "3.0.0"
+    APP_NAME: str = "Multi-AI-Agent"
+    APP_VERSION: str = _get_version()
     APP_ENV: str = Field(default="development")
     ENV: str = Field(default="")
 

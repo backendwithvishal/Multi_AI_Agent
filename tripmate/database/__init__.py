@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import time
 from typing import Any, Dict, Iterator, Optional, Sequence
 
@@ -178,6 +179,10 @@ def get_db_pool() -> Optional[Any]:
     if _db_pool_init_attempted and _db_pool is None:
         return None
 
+    if settings.is_test and not os.getenv("RUN_LIVE_DB_TESTS"):
+        _db_pool_init_attempted = True
+        return None
+
     url = get_formatted_db_url()
     if not url or not psycopg or not ConnectionPool:
         _db_pool_init_attempted = True
@@ -241,47 +246,53 @@ def check_db_health() -> Dict[str, Any]:
             "connected": False,
         }
 
+    pool = get_db_pool()
+    # In dev or test mode, if the connection pool is not active, return disabled immediately
+    # to avoid blocking on unresponsive network hosts.
+    if (settings.is_dev or settings.is_test) and pool is None:
+        return {
+            "status": "disabled",
+            "message": "Database pool not connected. Running in memory fallback mode.",
+            "connected": False,
+        }
+
     try:
-        with psycopg.connect(url, connect_timeout=3, row_factory=dict_row) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 AS alive")
-                res = cur.fetchone()
-                if not res or res.get("alive") != 1:
+        if pool and not pool.closed:
+            with pool.connection(timeout=2.0) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1 AS alive")
+                    res = cur.fetchone()
+                    if not res or res.get("alive") != 1:
+                        return {
+                            "status": "unhealthy",
+                            "message": "Database query probe failed",
+                            "connected": False,
+                        }
                     return {
-                        "status": "unhealthy",
-                        "message": "Database query probe failed",
-                        "connected": False,
-                    }
-
-                cur.execute(
-                    """
-                    SELECT table_name FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name IN ('users', 'watchlists', 'alerts', 'assets', 'thread_ownership');
-                    """
-                )
-                tables = [r["table_name"] for r in cur.fetchall()]
-                expected_tables = ["users", "watchlists", "alerts", "assets", "thread_ownership"]
-                missing = [t for t in expected_tables if t not in tables]
-
-                if missing:
-                    return {
-                        "status": "degraded",
-                        "message": f"Database connected but required tables missing: {', '.join(missing)}. Migrations pending.",
+                        "status": "healthy",
+                        "message": "PostgreSQL database connection active and pool verified",
                         "connected": True,
-                        "tables_found": len(tables),
                     }
-
-                return {
-                    "status": "healthy",
-                    "message": "PostgreSQL database connection active and schema verified",
-                    "connected": True,
-                    "tables": len(tables),
-                }
+        else:
+            with psycopg.connect(url, connect_timeout=2, row_factory=dict_row) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1 AS alive")
+                    res = cur.fetchone()
+                    if not res or res.get("alive") != 1:
+                        return {
+                            "status": "unhealthy",
+                            "message": "Database query probe failed",
+                            "connected": False,
+                        }
+                    return {
+                        "status": "healthy",
+                        "message": "PostgreSQL database connection active",
+                        "connected": True,
+                    }
     except Exception as exc:
         return {
             "status": "unhealthy",
-            "message": "Database connection probe failed",
+            "message": f"Database connection probe failed: {exc}",
             "connected": False,
         }
 
@@ -306,14 +317,19 @@ def initialize_checkpointer():
     """Initializes workflow checkpointer with strict production fail-fast rules.
     
     Rules:
+    - In test mode, fallback to MemorySaver for fast unit testing unless RUN_LIVE_DB_TESTS is set.
     - In production or any environment where ENV != 'dev', PostgreSQL is strictly required.
       If PostgresSaver cannot initialize, fail startup with RuntimeError.
     - MemorySaver is ONLY permitted when ENV='dev' (or development).
     - Connection pool is configured with min/max size, timeout, and health checks.
     """
     global checkpointer_pool
+
+    if settings.is_test and not os.getenv("RUN_LIVE_DB_TESTS"):
+        return MemorySaver() if MemorySaver else None
+
     db_url = get_formatted_db_url()
-    is_dev = (settings.ENV in ("dev", "development") or settings.APP_ENV in ("dev", "development")) and not settings.is_production
+    is_dev = (settings.ENV in ("dev", "development") or settings.APP_ENV in ("dev", "development") or settings.is_test) and not settings.is_production
 
     if db_url and psycopg and PostgresSaver and ConnectionPool:
         try:

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -255,18 +256,22 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
                 pipe.zcard(key)
                 pipe.zadd(key, {str(now): now})
                 pipe.expire(key, self.window_seconds + 5)
-            results = await pipe.execute()
+            results = await asyncio.wait_for(pipe.execute(), timeout=0.25)
 
             # Inspect zcard results (indices 1, 5, etc.)
             for i, key in enumerate(keys_to_check):
                 request_count = results[i * 4 + 1]
                 if request_count >= self.max_requests:
-                    oldest_entries = await hybrid_cache._redis_client.zrange(key, 0, 0, withscores=True)
+                    oldest_entries = await asyncio.wait_for(
+                        hybrid_cache._redis_client.zrange(key, 0, 0, withscores=True),
+                        timeout=0.25,
+                    )
                     retry_after = int(self.window_seconds - (now - oldest_entries[0][1])) if oldest_entries else 1
                     return True, max(1, retry_after)
             return False, 0
         except Exception as exc:
-            logger.warning(f"Redis rate limiter failed, falling back to in-memory: {exc}")
+            hybrid_cache._use_redis = False
+            logger.info(f"Redis rate limiter failed or timed out ({exc}), falling back to in-memory.")
             return None, 0
 
     def _is_rate_limited_in_memory(
@@ -300,7 +305,7 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
             is_llm_route = any(path.startswith(route) for route in self.LLM_ROUTES)
 
             from tripmate.cache.redis_cache import hybrid_cache
-            redis_available = bool(hybrid_cache._use_redis and hybrid_cache._redis_client)
+            redis_available = bool(hybrid_cache._use_redis and hybrid_cache._redis_client and not settings.is_test)
 
             is_limited: Optional[bool] = None
             retry_after: int = 0

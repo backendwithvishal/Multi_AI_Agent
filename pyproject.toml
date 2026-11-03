@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "multi-ai-agent"
+version = "3.0.0"
+description = "Multi-Agent AI Orchestration Platform built with LangGraph, MCP, FastAPI, PostgreSQL, and Redis."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "backendwithvishal", url = "https://github.com/backendwithvishal" }
+]
+requires-python = ">=3.11"
+keywords = ["ai", "agents", "langgraph", "fastapi", "mcp", "travel"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

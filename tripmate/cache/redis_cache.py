@@ -37,6 +37,11 @@ class RedisHybridCache:
         self._use_redis = False
         self.in_memory = fallback_cache or app_cache
 
+        from tripmate.config.settings import settings
+        if settings.is_test and not os.getenv("RUN_LIVE_REDIS_TESTS"):
+            self._use_redis = False
+            return
+
         if self.redis_url and aioredis is not None:
             try:
                 self._redis_client = aioredis.from_url(
