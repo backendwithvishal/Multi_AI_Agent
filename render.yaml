@@ -1,13 +1,12 @@
 services:
   - type: web
     name: tripmate-ai-agent-platform
-    env: python
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     region: singapore
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    preDeployCommand: "alembic upgrade head"
-    startCommand: "uvicorn app:app --host 0.0.0.0 --port $PORT"
-    healthCheckPath: /health
+    healthCheckPath: /health/live
     envVars:
       - key: APP_ENV
         value: production
@@ -30,6 +29,8 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
+        sync: false
+      - key: API_KEY
         sync: false
       - key: SECRET_KEY
         generateValue: true
