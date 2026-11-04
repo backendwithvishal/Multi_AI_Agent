@@ -250,3 +250,28 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --build app
    docker compose -f docker-compose.prod.yml up -d app
    ```
 
+### Updating Pinned Container Images Safely
+
+To maintain reproducible and tamper-proof builds, base images and toolchains in `Dockerfile` are pinned by both tag and multi-arch digest (`image:tag@sha256:<digest>`).
+
+**1. Inspect and Retrieve Official Digests from Registry:**
+Never guess or fabricate a sha256 digest. Retrieve the exact multi-arch index digest directly using Docker CLI or registry inspect:
+```bash
+# For Docker Hub images (e.g. Python):
+docker buildx imagetools inspect python:3.11.11-slim-bookworm
+
+# For GitHub Container Registry (ghcr.io) images (e.g. uv):
+docker buildx imagetools inspect ghcr.io/astral-sh/uv:0.5.29
+```
+
+**2. Verify Resolution with Local Script:**
+Before committing, run the repository verification script to ensure all registry endpoints resolve:
+```bash
+python scripts/verify_pins.py
+# or via pytest
+pytest tests/test_pins.py -v
+```
+
+**3. Automated Updates via Dependabot:**
+Because images retain readable semantic version tags alongside their digests (e.g., `python:3.11.11-slim-bookworm@sha256:...` and `ghcr.io/astral-sh/uv:0.5.29@sha256:...`), Dependabot and container vulnerability scanners automatically track newer patch releases and generate Pull Requests with updated tags and real resolved digests from the registry.
+

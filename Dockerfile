@@ -2,7 +2,7 @@
 # Multi-stage Dockerfile for TripMate AI Production Service
 # Stage 1: Build & Dependency Resolution Stage
 # ==============================================================================
-FROM python:3.11.11-slim-bookworm@sha256:4a02be04907a72d7318ec7e8284563b782deaeaf43ab6a84f3e6f9e8a75e3c79 AS builder
+FROM python:3.11.11-slim-bookworm@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS builder
 
 WORKDIR /build
 
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy uv & uvx binaries from pinned official image
-COPY --from=ghcr.io/astral-sh/uv:0.5.29@sha256:1a82f05a9601d51a6572eb0f994f87a80b188c6bbd8be6a72e811f5d233c46e3 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.5.29@sha256:88d7b48fc9f17462c82b5482e497af250d337f3f14e1ac97c16e68eba49b651e /uv /uvx /usr/local/bin/
 
 # Install python dependencies strictly from hashed lockfile into isolated prefix
 COPY requirements.lock .
@@ -31,7 +31,7 @@ RUN uv tool install --no-cache aviationstack-mcp
 # ==============================================================================
 # Stage 2: Minimal Hardened Production Runtime (No compiler, No git, No curl)
 # ==============================================================================
-FROM python:3.11.11-slim-bookworm@sha256:4a02be04907a72d7318ec7e8284563b782deaeaf43ab6a84f3e6f9e8a75e3c79 AS runner
+FROM python:3.11.11-slim-bookworm@sha256:081075da77b2b55c23c088251026fb69a7b2bf92471e491ff5fd75c192fd38e5 AS runner
 
 WORKDIR /app
 
@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy uv/uvx binaries from pinned official image
-COPY --from=ghcr.io/astral-sh/uv:0.5.29@sha256:1a82f05a9601d51a6572eb0f994f87a80b188c6bbd8be6a72e811f5d233c46e3 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.5.29@sha256:88d7b48fc9f17462c82b5482e497af250d337f3f14e1ac97c16e68eba49b651e /uv /uvx /usr/local/bin/
 
 # Copy python dependencies and cached tools from builder
 COPY --from=builder /install /usr/local
@@ -72,4 +72,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request, os; port = os.environ.get('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/health/live')"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
+CMD ["sh", "-c", "exec gunicorn -b 0.0.0.0:${PORT:-8000} -c gunicorn.conf.py app:app"]
