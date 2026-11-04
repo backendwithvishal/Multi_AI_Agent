@@ -31,3 +31,4 @@ def test_pinned_image_digests_resolve():
         f"STDOUT:\n{proc.stdout}\n"
         f"STDERR:\n{proc.stderr}"
     )
+

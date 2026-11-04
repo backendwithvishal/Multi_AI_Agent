@@ -7,3 +7,4 @@ set -euo pipefail
 
 echo "Running pre-commit image pin verification..."
 python3 scripts/verify_pins.py
+
