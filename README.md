@@ -1012,7 +1012,6 @@ Multi_AI_Agent/
 │   ├── ARCHITECTURE.md
 │   ├── RUNBOOK.md
 │   ├── THREAT_MODEL.md
-│   ├── DESIGN_PATTERNS.md
 │   └── DEPLOYMENT.md
 ├── tests/
 │   ├── test_docs.py                # Env var, endpoint, version, security control checks
@@ -1038,27 +1037,6 @@ Multi_AI_Agent/
     ├── strategies/                 # LLM provider & booking strategies
     └── tasks/                      # AsyncTaskQueue & worker handlers
 ```
-
----
-
-## Design Patterns
-
-Ten software patterns are implemented throughout the codebase:
-
-| # | Pattern | Purpose |
-|---|---------|---------|
-| 1 | **Repository** | Decouples business logic from persistence |
-| 2 | **Factory** | Dynamic agent discovery and LLM provider client creation |
-| 3 | **Singleton** | Thread-safe shared resources (DataStore, ModelRouter, AgentRegistry) |
-| 4 | **Strategy** | Pluggable LLM provider selection and booking algorithm selection |
-| 5 | **Observer** | In-process pub/sub for SSE streaming, Prometheus, audit logging |
-| 6 | **Builder** | Step-by-step assembly of `TravelState` and API response objects |
-| 7 | **Adapter** | Uniform interface over OpenWeather, AviationStack, Tavily APIs |
-| 8 | **Circuit Breaker** | Fail-fast for Tavily, AviationStack, OpenWeather, GDS |
-| 9 | **Command / Query Bus** | Separates write (command) and read (query) operations |
-| 10 | **State Machine** | LangGraph `StateGraph` for deterministic workflow transitions |
-
-See [docs/DESIGN_PATTERNS.md](docs/DESIGN_PATTERNS.md) for detailed implementation notes.
 
 ---
 

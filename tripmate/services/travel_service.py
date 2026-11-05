@@ -1,10 +1,10 @@
 """
-High-Level Travel Planning Service Layer (Refactored with Patterns & Reliability)
+High-Level Travel Planning Service Layer
 
-This service orchestrates all LangGraph workflow executions:
+Orchestrates all LangGraph workflow executions:
 1. `execute_travel_plan`: Starts a new travel request thread or continues an existing one.
 2. `resume_travel_plan`: Resumes a thread paused for Human-in-the-Loop (HITL) approval with TTL and idempotency.
-3. `stream_travel_events`: Generates Server-Sent Events (SSE) with real graph updates, disconnect handling, and heartbeats.
+3. `stream_travel_events`: Generates Server-Sent Events (SSE) with graph updates, disconnect handling, and heartbeats.
 4. Maintains run history in memory for observability, metrics, and workflow replay APIs.
 """
 
@@ -13,31 +13,17 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 from fastapi import HTTPException, Request, status
-# pyrefly: ignore [missing-import]
+from langchain_core.messages import HumanMessage, BaseMessage
 from langgraph.types import Command
 
 from tripmate.config.settings import settings
 from tripmate.api.dependencies import validate_thread_ownership
-from tripmate.builders.response_builder import TravelPlanResponseBuilder
-from tripmate.builders.workflow_state_builder import TravelWorkflowStateBuilder
 from tripmate.core.singleton import SingletonMeta
 from tripmate.database.store import store
-from tripmate.events.dispatcher import workflow_dispatcher
-from tripmate.events.events import (
-    ApprovalRequiredEvent,
-    CriticCompletedEvent,
-    ItineraryCompletedEvent,
-    SpecialistsCompletedEvent,
-    SupervisorCompletedEvent,
-    WorkflowCompletedEvent,
-    WorkflowFailedEvent,
-    WorkflowStartedEvent,
-)
+from tripmate.graph.state import TravelState
 from tripmate.graph.workflow import travel_workflow_graph
-from tripmate.repositories.interfaces import IThreadOwnerRepository
-from tripmate.repositories.store_repositories import thread_owner_repository
 from tripmate.services.observability import calculate_cost, estimate_tokens
 
 logger = logging.getLogger("tripmate.travel_service")
@@ -45,12 +31,123 @@ logger = logging.getLogger("tripmate.travel_service")
 # Global in-memory store for workflow run telemetry and replay history
 RUN_STORE: Dict[str, Dict[str, Any]] = {}
 
+# Active in-flight runs registry for graceful shutdown
+ACTIVE_RUNS: set[asyncio.Task] = set()
+
+
+def build_initial_travel_state(
+    user_query: str,
+    thread_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+    trip_constraints: Optional[Dict[str, Any]] = None,
+    start_time: Optional[float] = None,
+) -> TravelState:
+    """Constructs a validated initial LangGraph TravelState dictionary."""
+    cleaned_query = (user_query or "").strip()
+    if not cleaned_query:
+        raise ValueError("Cannot build TravelState: user_query must be provided.")
+
+    effective_thread_id = (thread_id.strip() if thread_id and thread_id.strip() else None) or f"user_{uuid.uuid4().hex}"
+    effective_run_id = (run_id.strip() if run_id and run_id.strip() else None) or f"run_{uuid.uuid4().hex[:12]}"
+
+    return {
+        "messages": [HumanMessage(content=cleaned_query)],
+        "user_query": cleaned_query,
+        "user_id": user_id.strip() if user_id and user_id.strip() else None,
+        "thread_id": effective_thread_id,
+        "run_id": effective_run_id,
+        "status": "RUNNING",
+        "guardrail_allowed": True,
+        "guardrail_reason": "",
+        "selected_agents": [],
+        "trip_constraints": dict(trip_constraints) if trip_constraints else {},
+        "supervisor_reasoning": "",
+        "flight_results": "",
+        "hotel_results": "",
+        "weather_results": "",
+        "budget_results": "",
+        "itinerary": "",
+        "approval_request": "",
+        "approved": False,
+        "human_feedback": "",
+        "final_response": "",
+        "structured_outputs": {},
+        "evidence_items": [],
+        "critic_report": {},
+        "llm_calls": 0,
+        "start_time": start_time or time.time(),
+        "metrics": {"agent_latencies": {}, "total_latency_ms": 0.0},
+    }
+
 
 def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optional[str] = None) -> Dict[str, Any]:
-    """Formats internal graph dictionary into clean API response payload via TravelPlanResponseBuilder."""
-    builder = TravelPlanResponseBuilder(result, thread_id).with_run_id(run_id)
-    payload = builder.build()
-    effective_run_id = payload["run_id"]
+    """Formats internal graph dictionary into clean API response payload with telemetry."""
+    interrupts = result.get("__interrupt__", [])
+    interrupt_data = None
+    if interrupts:
+        first = interrupts[0]
+        payload = getattr(first, "value", first)
+        interrupt_data = payload if isinstance(payload, dict) else {"value": payload}
+
+    messages = result.get("messages", [])
+    last_message = messages[-1].content if messages else ""
+    answer = result.get("final_response") or last_message
+
+    if interrupt_data:
+        answer = interrupt_data.get("draft_itinerary") or result.get("itinerary", "")
+
+    effective_run_id = run_id or result.get("run_id") or f"run_{uuid.uuid4().hex[:12]}"
+
+    raw_metrics = result.get("metrics", {})
+    if isinstance(raw_metrics, dict):
+        query_text = result.get("user_query", "")
+        answer_text = str(answer)
+        input_tokens = estimate_tokens(query_text)
+        output_tokens = estimate_tokens(answer_text)
+        cost_usd = calculate_cost("llama-3.3-70b-versatile", input_tokens, output_tokens)
+
+        raw_metrics["token_usage"] = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
+        raw_metrics["estimated_cost_usd"] = cost_usd
+
+    payload = {
+        "run_id": effective_run_id,
+        "thread_id": thread_id,
+        "status": result.get("status", "COMPLETED" if not interrupt_data else "WAITING_FOR_APPROVAL"),
+        "answer": answer,
+        "requires_approval": interrupt_data is not None,
+        "approval_request": (
+            interrupt_data.get("approval_request", "")
+            if interrupt_data
+            else result.get("approval_request", "")
+        ),
+        "flight_results": result.get("flight_results", ""),
+        "hotel_results": result.get("hotel_results", ""),
+        "weather_results": result.get("weather_results", ""),
+        "budget_results": result.get("budget_results", ""),
+        "itinerary": (
+            interrupt_data.get("draft_itinerary", "")
+            if interrupt_data
+            else result.get("itinerary", "")
+        ),
+        "selected_agents": result.get("selected_agents", []),
+        "trip_constraints": result.get("trip_constraints", {}),
+        "supervisor_reasoning": result.get("supervisor_reasoning", ""),
+        "guardrail_allowed": result.get("guardrail_allowed", True),
+        "guardrail_reason": result.get("guardrail_reason", ""),
+        "critic_report": result.get("critic_report"),
+        "evidence_items": result.get("evidence_items", []),
+        "structured_outputs": result.get("structured_outputs", {}),
+        "approved": result.get("approved"),
+        "human_feedback": result.get("human_feedback", ""),
+        "llm_calls": result.get("llm_calls", 0),
+        "metrics": raw_metrics,
+    }
+
     RUN_STORE[effective_run_id] = payload
     return payload
 
@@ -58,8 +155,8 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optio
 class TravelService(metaclass=SingletonMeta):
     """Main service providing clean API interfaces for workflow invocation."""
 
-    def __init__(self, owner_repo: Optional[IThreadOwnerRepository] = None):
-        self._owner_repo = owner_repo or thread_owner_repository
+    def __init__(self, data_store=None):
+        self._store = data_store or store
         self._approval_timestamps: Dict[str, float] = {}
         self._approval_history: Dict[str, Dict[str, Any]] = {}
 
@@ -74,13 +171,13 @@ class TravelService(metaclass=SingletonMeta):
             thread_id = f"thread_{uuid.uuid4().hex}"
 
         if user_id:
-            registered_owner = self._owner_repo.get_owner(thread_id)
+            registered_owner = self._store.get_thread_owner(thread_id)
             if registered_owner and registered_owner != user_id:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={"code": "THREAD_NOT_FOUND", "message": f"Thread '{thread_id}' not found."},
                 )
-            self._owner_repo.register_owner(thread_id, user_id)
+            self._store.register_thread_owner(thread_id, user_id)
 
         run_id = f"run_{uuid.uuid4().hex[:12]}"
         config = {
@@ -89,56 +186,21 @@ class TravelService(metaclass=SingletonMeta):
         }
         t0 = time.time()
 
-        # Build validated LangGraph initial state using Builder pattern
-        state_builder = (
-            TravelWorkflowStateBuilder()
-            .with_user_query(user_input)
-            .with_thread_id(thread_id)
-            .with_user_id(user_id)
-            .with_run_id(run_id)
-            .with_start_time(t0)
-        )
-        initial_state = state_builder.build()
-
-        # Emit workflow started event via Observer pattern
-        await workflow_dispatcher.publish(
-            WorkflowStartedEvent(thread_id=thread_id, run_id=run_id, request_id=run_id)
+        initial_state = build_initial_travel_state(
+            user_query=user_input,
+            thread_id=thread_id,
+            user_id=user_id,
+            run_id=run_id,
+            start_time=t0,
         )
 
-        try:
-            result = await travel_workflow_graph.ainvoke(initial_state, config=config)
-            serialized = serialize_graph_result(result, thread_id, run_id=run_id)
+        result = await travel_workflow_graph.ainvoke(initial_state, config=config)
+        serialized = serialize_graph_result(result, thread_id, run_id=run_id)
 
-            if serialized.get("requires_approval"):
-                self._approval_timestamps[thread_id] = time.time()
-                await workflow_dispatcher.publish(
-                    ApprovalRequiredEvent(
-                        thread_id=thread_id,
-                        run_id=run_id,
-                        approval_request=serialized.get("approval_request", ""),
-                    )
-                )
+        if serialized.get("requires_approval"):
+            self._approval_timestamps[thread_id] = time.time()
 
-            await workflow_dispatcher.publish(
-                WorkflowCompletedEvent(
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    success=True,
-                    request_id=run_id,
-                    result=serialized,
-                )
-            )
-            return serialized
-        except Exception as exc:
-            await workflow_dispatcher.publish(
-                WorkflowFailedEvent(
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    error=str(exc),
-                    request_id=run_id,
-                )
-            )
-            raise exc
+        return serialized
 
     async def resume_travel_plan(
         self,
@@ -196,7 +258,6 @@ class TravelService(metaclass=SingletonMeta):
             config=config,
         )
         serialized = serialize_graph_result(result, thread_id)
-        # Store for idempotent subsequent calls
         self._approval_history[thread_id] = serialized
         self._approval_timestamps.pop(thread_id, None)
         return serialized
@@ -220,18 +281,17 @@ class TravelService(metaclass=SingletonMeta):
                 pass
 
         try:
-            # Emit initial SSE heartbeat and start event
             yield ": heartbeat\n\n"
             yield f"event: workflow.started\ndata: {json.dumps({'thread_id': thread_id, 'request_id': request_id, 'status': 'started'})}\n\n"
 
             if user_id:
-                registered_owner = await asyncio.to_thread(self._owner_repo.get_owner, thread_id)
+                registered_owner = await asyncio.to_thread(self._store.get_thread_owner, thread_id)
                 if registered_owner and registered_owner != user_id:
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail={"code": "THREAD_NOT_FOUND", "message": f"Thread '{thread_id}' not found."},
                     )
-                await asyncio.to_thread(self._owner_repo.register_owner, thread_id, user_id)
+                await asyncio.to_thread(self._store.register_thread_owner, thread_id, user_id)
 
             run_id = f"run_{uuid.uuid4().hex[:12]}"
             config = {
@@ -240,20 +300,16 @@ class TravelService(metaclass=SingletonMeta):
             }
             t0 = time.time()
 
-            # Build validated initial state using Builder pattern
-            state_builder = (
-                TravelWorkflowStateBuilder()
-                .with_user_query(user_input)
-                .with_thread_id(thread_id)
-                .with_user_id(user_id)
-                .with_run_id(run_id)
-                .with_start_time(t0)
+            initial_input = build_initial_travel_state(
+                user_query=user_input,
+                thread_id=thread_id,
+                user_id=user_id,
+                run_id=run_id,
+                start_time=t0,
             )
-            initial_input = state_builder.build()
 
             # Stream real-time LangGraph execution progress using astream_events v2
             async for event in travel_workflow_graph.astream_events(initial_input, config=config, version="v2"):
-                # Handle client disconnect cancellation
                 if request and await request.is_disconnected():
                     logger.info(f"Client disconnected. Cancelling graph run for thread '{thread_id}'.")
                     return
@@ -290,31 +346,14 @@ class TravelService(metaclass=SingletonMeta):
                         if ev_name == "supervisor" and isinstance(output_data, dict):
                             selected = output_data.get("selected_agents", [])
                             reasoning = output_data.get("supervisor_reasoning", "")
-                            await workflow_dispatcher.publish(
-                                SupervisorCompletedEvent(
-                                    thread_id=thread_id,
-                                    run_id=run_id,
-                                    selected_agents=selected,
-                                    reasoning=reasoning,
-                                )
-                            )
                             yield f"event: supervisor.decision\ndata: {json.dumps({'selected_agents': selected, 'reasoning': reasoning})}\n\n"
                             yield f"event: supervisor.completed\ndata: {json.dumps({'selected_agents': selected, 'reasoning': reasoning})}\n\n"
                         elif ev_name == "parallel_specialists":
-                            await workflow_dispatcher.publish(
-                                SpecialistsCompletedEvent(thread_id=thread_id, run_id=run_id, node_name=ev_name)
-                            )
                             yield f"event: specialists.completed\ndata: {json.dumps({'status': 'completed', 'node': ev_name})}\n\n"
                         elif ev_name == "critic" and isinstance(output_data, dict):
                             report = output_data.get("critic_report")
-                            await workflow_dispatcher.publish(
-                                CriticCompletedEvent(thread_id=thread_id, run_id=run_id, critic_report=report)
-                            )
                             yield f"event: critic.completed\ndata: {json.dumps({'critic_report': report})}\n\n"
                         elif ev_name == "itinerary_agent":
-                            await workflow_dispatcher.publish(
-                                ItineraryCompletedEvent(thread_id=thread_id, run_id=run_id)
-                            )
                             yield f"event: itinerary.completed\ndata: {json.dumps({'status': 'draft_synthesized'})}\n\n"
 
                 # 4. Token streaming deltas
@@ -323,16 +362,13 @@ class TravelService(metaclass=SingletonMeta):
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         yield f"event: token\ndata: {json.dumps({'content': chunk.content})}\n\n"
 
-            # Check for disconnect after graph execution loop
             if request and await request.is_disconnected():
                 return
 
-            # Read finalized or interrupted state from checkpointer
             state = await travel_workflow_graph.aget_state(config)
             state_values = getattr(state, "values", {}) or {}
             serialized = serialize_graph_result(state_values, thread_id, run_id=run_id)
 
-            # Check if workflow reached Human-in-the-Loop interruption
             is_hitl = (
                 serialized.get("requires_approval")
                 or "human_approval" in getattr(state, "next", ())
@@ -341,26 +377,9 @@ class TravelService(metaclass=SingletonMeta):
 
             if is_hitl:
                 self._approval_timestamps[thread_id] = time.time()
-                await workflow_dispatcher.publish(
-                    ApprovalRequiredEvent(
-                        thread_id=thread_id,
-                        run_id=run_id,
-                        approval_request=serialized.get("approval_request", "Please review draft itinerary and approve or provide revision feedback."),
-                    )
-                )
                 yield f"event: hitl_required\ndata: {json.dumps({'approval_request': serialized.get('approval_request')})}\n\n"
                 yield f"event: approval.required\ndata: {json.dumps({'approval_request': serialized.get('approval_request')})}\n\n"
 
-            # Publish completion and emit final results
-            await workflow_dispatcher.publish(
-                WorkflowCompletedEvent(
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    success=True,
-                    request_id=request_id,
-                    result=serialized,
-                )
-            )
             yield f"event: final_result\ndata: {json.dumps({'answer': serialized.get('answer'), 'itinerary': serialized.get('itinerary')})}\n\n"
             yield f"event: workflow.completed\ndata: {json.dumps({'success': True, 'request_id': request_id, **serialized})}\n\n"
 
@@ -369,14 +388,6 @@ class TravelService(metaclass=SingletonMeta):
             return
         except Exception as exc:
             generic_err = f"Workflow error: {exc}"
-            await workflow_dispatcher.publish(
-                WorkflowFailedEvent(
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    error=str(exc),
-                    request_id=request_id,
-                )
-            )
             yield f"event: error\ndata: {json.dumps({'code': 'WORKFLOW_ERROR', 'message': generic_err, 'request_id': request_id})}\n\n"
             yield f"event: workflow.failed\ndata: {json.dumps({'success': False, 'error': generic_err, 'request_id': request_id})}\n\n"
         finally:
@@ -387,10 +398,6 @@ class TravelService(metaclass=SingletonMeta):
                     metrics_registry.dec_inflight_runs()
                 except Exception:
                     pass
-
-
-# Active in-flight runs registry for graceful shutdown
-ACTIVE_RUNS: set[asyncio.Task] = set()
 
 
 # Shared singleton instance

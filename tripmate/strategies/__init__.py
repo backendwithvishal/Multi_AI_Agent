@@ -1,7 +1,7 @@
 """
 Strategy Pattern Module
 
-Exposes interchangeable provider and search strategies.
+Exposes interchangeable LLM provider strategies.
 """
 
 from tripmate.strategies.llm_strategies import (
@@ -11,12 +11,6 @@ from tripmate.strategies.llm_strategies import (
     ModelTier,
     OpenRouterProviderStrategy,
 )
-from tripmate.strategies.booking_strategies import (
-    AmadeusSandboxFlightStrategy,
-    AmadeusSandboxHotelStrategy,
-    IFlightSearchStrategy,
-    IHotelSearchStrategy,
-)
 
 __all__ = [
     "ModelTier",
@@ -24,8 +18,4 @@ __all__ = [
     "GroqProviderStrategy",
     "OpenRouterProviderStrategy",
     "HuggingFaceProviderStrategy",
-    "IFlightSearchStrategy",
-    "IHotelSearchStrategy",
-    "AmadeusSandboxFlightStrategy",
-    "AmadeusSandboxHotelStrategy",
 ]

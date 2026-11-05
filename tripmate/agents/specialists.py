@@ -31,7 +31,6 @@ from tripmate.integrations.mcp import (
 )
 from tripmate.cache.redis_cache import hybrid_cache
 from tripmate.adapters import WeatherServiceAdapter, FlightServiceAdapter, TavilySearchAdapter
-from tripmate.factories.agent_factory import AgentFactory
 
 
 from tripmate.config.settings import settings
@@ -432,18 +431,12 @@ Create a clear, practical day-by-day draft itinerary ready for human review.
             )
 
 
-# Register agent classes with AgentFactory and instantiate into AgentRegistry
-AgentFactory.register_agent_class("flight_agent", FlightAgent)
-AgentFactory.register_agent_class("hotel_agent", HotelAgent)
-AgentFactory.register_agent_class("weather_agent", WeatherAgent)
-AgentFactory.register_agent_class("budget_agent", BudgetAgent)
-AgentFactory.register_agent_class("itinerary_agent", ItineraryAgent)
-
-flight_agent_obj = AgentFactory.create_agent("flight_agent")
-hotel_agent_obj = AgentFactory.create_agent("hotel_agent")
-weather_agent_obj = AgentFactory.create_agent("weather_agent")
-budget_agent_obj = AgentFactory.create_agent("budget_agent")
-itinerary_agent_obj = AgentFactory.create_agent("itinerary_agent")
+# Instantiate specialist agents and register into AgentRegistry
+flight_agent_obj = FlightAgent()
+hotel_agent_obj = HotelAgent()
+weather_agent_obj = WeatherAgent()
+budget_agent_obj = BudgetAgent()
+itinerary_agent_obj = ItineraryAgent()
 
 agent_registry.register(flight_agent_obj)
 agent_registry.register(hotel_agent_obj)
