@@ -38,7 +38,7 @@
 | **Database Migrations** | [`migrations/versions/002_align_schema.py`](file:///d:/AI_Project/Multi_AI_Agent/migrations/versions/002_align_schema.py) | Alembic revision aligning table schemas (`alerts.alert_type`, `assets.metadata`, `assets.trip_id`). |
 | **Documentation & API Specs** | [`README.md`](file:///d:/AI_Project/Multi_AI_Agent/README.md) | Platform overview, architectural diagrams, pattern tables, and quickstart documentation. |
 | **Documentation & API Specs** | [`docs/CODEBASE_AUDIT.md`](file:///d:/AI_Project/Multi_AI_Agent/docs/CODEBASE_AUDIT.md) | Previous preliminary audit notes. |
-| **Documentation & API Specs** | [`docs/DESIGN_PATTERNS.md`](file:///d:/AI_Project/Multi_AI_Agent/docs/DESIGN_PATTERNS.md) | Deep-dive guide documenting the 10 software design patterns implemented in TripMate. |
+| **Documentation & API Specs** | `docs/ARCHITECTURE.md` | Architecture and system design specifications. |
 | **Documentation & API Specs** | [`docs/RENDER_DEPLOYMENT.md`](file:///d:/AI_Project/Multi_AI_Agent/docs/RENDER_DEPLOYMENT.md) | Deployment instructions for Render web services and managed PostgreSQL. |
 | **Documentation & API Specs** | [`postman/Multi_AI_Agent.postman_collection.json`](file:///d:/AI_Project/Multi_AI_Agent/postman/Multi_AI_Agent.postman_collection.json) | Exported Postman test collection with requests for all 13 API domains. |
 | **Documentation & API Specs** | [`postman/TripMate_Local.postman_environment.json`](file:///d:/AI_Project/Multi_AI_Agent/postman/TripMate_Local.postman_environment.json) | Postman local environment variable set. |

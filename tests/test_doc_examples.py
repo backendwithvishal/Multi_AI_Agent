@@ -48,7 +48,7 @@ from fastapi import Response, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from tripmate.config.settings import settings
-from tripmate.repositories.store_repositories import user_repository
+from tripmate.database.store import store
 from tripmate.schemas import (
     UserRegisterRequest,
     UserLoginRequest,
@@ -88,13 +88,15 @@ def _run(coro_or_val):
             else:
                 val = res
         except StopIteration as stop:
-            # stack.pop()
+            stack.pop()
             val = stop.value
+            exc = None
         except Exception as e:
-            # stack.pop()
+            stack.pop()
             if not stack:
                 raise
             exc = e
+            val = None
     return val
 
 
@@ -209,8 +211,8 @@ class TestAuthDocExamples:
         """Documented GET /api/v1/auth/me returns authenticated user identity."""
         from tripmate.api.v1.routes.auth import get_me
         from tripmate.database.store import hash_password
-        # Ensure user exists in user_repository for profile retrieval
-        created = user_repository.create(
+        # Ensure user exists in store for profile retrieval
+        created = store.create_user(
             username="doc_user_me",
             email="doc_user_me@example.com",
             password_hash=hash_password("Pass123!"),

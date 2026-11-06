@@ -1,221 +1,134 @@
-# Runbook — Multi-AI-Agent
+# Runbook & Operations — Multi-AI-Agent
 
-> [!NOTE]
-> Operations guide for v3.0.0. Keep this document updated when infrastructure changes.
-
----
-
-## Table of Contents
-
-1. [Prerequisites](#prerequisites)
-2. [Starting the Service](#starting-the-service)
-3. [Health Checks](#health-checks)
-4. [Scaling](#scaling)
-5. [Circuit Breaker Management](#circuit-breaker-management)
-6. [Cache Operations](#cache-operations)
-7. [Database Migrations](#database-migrations)
-8. [Incident Response](#incident-response)
-9. [Log Reference](#log-reference)
+Operational runbook and monitoring guide for Multi-AI-Agent v3.0.0.
 
 ---
 
-## Prerequisites
+## 1. Prerequisites
 
-| Dependency | Minimum version | Required? |
-|------------|----------------|-----------|
-| Python | 3.11 | ✅ |
-| PostgreSQL | 16 | Production only |
-| Redis | 7 | Strongly recommended |
-| Groq, OpenRouter, or HuggingFace API key | — | At least one required |
+| Component | Minimum Version | Note |
+|:---|:---|:---|
+| Python | 3.11+ | 3.11 through 3.13 supported |
+| PostgreSQL | 16+ | Required in production (in-memory store used in dev) |
+| Redis | 7+ | Recommended for distributed rate-limiting and cache |
+| LLM API Key | — | At least one required (`GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `HUGGINGFACE_API_KEY`) |
 
 ---
 
-## Starting the Service
+## 2. Service Management
 
-### Development (hot-reload, localhost)
-
+### Development (Hot-Reload)
 ```bash
 cp .env.example .env
-# fill in at least GROQ_API_KEY and set ENV=dev
+# Set ENV=dev and configure GROQ_API_KEY
 python app.py
 ```
+App starts on `http://127.0.0.1:8000`.
 
-Server binds to `http://127.0.0.1:8000` in dev mode.
-
-### Production (gunicorn + uvicorn workers)
-
+### Production (Gunicorn + Uvicorn Workers)
 ```bash
 gunicorn -c gunicorn.conf.py app:app
 ```
-
-Or override worker count:
-
+Override worker count via environment:
 ```bash
 WEB_CONCURRENCY=4 gunicorn -c gunicorn.conf.py app:app
 ```
 
-### Docker Compose (local full stack)
-
+### Docker Compose
 ```bash
 docker compose up --build
 ```
 
-Brings up: API + PostgreSQL 16 + Redis 7. API available at `http://localhost:8000`.
+---
 
-### Docker Compose (production profile)
+## 3. Health & Readiness Probes
 
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
+| Endpoint | Probe | Success Criteria | Action on Failure |
+|:---|:---|:---|:---|
+| `GET /api/v1/health` | Liveness | HTTP 200, `"status": "ok"` | Restart container |
+| `GET /health/ready` | Readiness | HTTP 200, `"status": "ready"` or `"degraded"` | Check DB pool and Redis connectivity |
+| `GET /api/v1/metrics` | Telemetry | HTTP 200 (Prometheus exposition) | Check internal network / METRICS_TOKEN |
 
 ---
 
-## Health Checks
+## 4. Service Level Objectives (SLOs)
 
-| Endpoint | Purpose | Expected when healthy |
-|----------|---------|----------------------|
-| `GET /health/live` | Liveness probe (k8s / Docker) | `200 {"status": "ok"}` |
-| `GET /health/ready` | Readiness probe (DB + Redis + MCP) | `200 {"status": "ready"}` |
-| `GET /api/v1/health` | Detailed telemetry (features, cache stats, circuit breakers) | `200 {"status": "ok", …}` |
-| `GET /api/v1/status` | Operational status (uptime, agent registry, model tiers) | `200 {"success": true, …}` |
-
-If `/health/ready` returns `503`, check:
-
-```bash
-# Database
-curl http://localhost:8000/api/v1/health | python -m json.tool | grep -A5 database
-
-# Redis
-curl http://localhost:8000/api/v1/health | python -m json.tool | grep -A3 cache_stats
-```
+| Capability | SLI Indicator | Target (SLO) | Window |
+|:---|:---|:---|:---|
+| **Availability** | Non-5xx HTTP requests | **99.9%** | Rolling 30 Days |
+| **Readiness** | `/health/ready` probe success | **99.95%** | Rolling 30 Days |
+| **REST Latency** | Non-workflow REST endpoints | **p95 < 250ms, p99 < 500ms** | 5-minute rolling |
+| **Workflow Stream** | End-to-end multi-agent stream | **p95 < 12s, p99 < 20s** | 5-minute rolling |
+| **Checkpointer Latency**| Checkpoint save/retrieve | **p95 < 50ms, p99 < 150ms** | 5-minute rolling |
 
 ---
 
-## Scaling
+## 5. Prometheus Alerting Rules
 
-- **Horizontal:** Increase `WEB_CONCURRENCY` in `.env` or via `WEB_CONCURRENCY=N gunicorn …`.
-- **Vertical:** PostgreSQL pool size: `DB_POOL_MAX_SIZE` (default 10); Redis uses a single async connection per worker.
-- **Rate limits:** `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS` are per-IP and share state via Redis. Scale correctly by ensuring all workers point to the same Redis instance.
+Place these rules in your Prometheus alert manager (`/etc/prometheus/alerts/tripmate.yml`):
+
+### High 5xx Error Rate (`TripMateHigh5xxRate`)
+- **Severity**: Critical
+- **Condition**: `sum(rate(tripmate_http_requests_total{status=~"5.."}[5m])) / sum(rate(tripmate_http_requests_total[5m])) * 100 > 1.0`
+- **Action**: Check `tripmate.access` logs filtered by `status=500` for unhandled exceptions.
+
+### Readiness Probe Failing (`TripMateReadinessFailing`)
+- **Severity**: Critical
+- **Condition**: `tripmate_http_requests_total{path="/health/ready",status!="200"} > 0`
+- **Action**: Verify PostgreSQL connection pool (`DB_POOL_MAX_SIZE`), Redis ping, and MCP subprocesses.
+
+### LLM Token Spikes (`TripMateLLMTokenSpike`)
+- **Severity**: Warning
+- **Condition**: `sum(rate(tripmate_llm_tokens_total{type="total"}[5m])) * 60 > 250000`
+- **Action**: Review active user quotas; enforce `DAILY_TOKEN_BUDGET_PER_USER`.
 
 ---
 
-## Circuit Breaker Management
+## 6. Circuit Breakers & Cache Management
 
-Circuit breakers protect against cascading failures to external APIs.
-
-### View current states
-
+### Reset a Tripped Circuit Breaker
 ```bash
-curl http://localhost:8000/api/v1/health | python -m json.tool | python -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d['circuit_breakers'], indent=2))"
-```
-
-States: `closed` (healthy) → `open` (failing) → `half_open` (testing recovery).
-
-### Manually reset an open breaker
-
-Requires admin credentials:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/admin/circuit-breakers/tavily/reset \
+curl -X POST http://localhost:8000/api/v1/admin/circuit-breakers/groq/reset \
   -H "Authorization: Bearer <admin-token>"
 ```
 
-Valid service names: `tavily`, `aviationstack`, `openweather`, `gds`, `all`.
-
----
-
-## Cache Operations
-
-### Clear all caches (admin)
-
+### Flush Redis / In-Memory Cache
 ```bash
 curl -X POST http://localhost:8000/api/v1/admin/cache/clear \
   -H "Authorization: Bearer <admin-token>"
 ```
 
-### View cache stats
-
-```bash
-curl http://localhost:8000/api/v1/health | python -m json.tool | python -c "import sys,json; d=json.load(sys.stdin); print(json.dumps(d['cache_stats'], indent=2))"
-```
-
-### Flush Redis directly (emergency)
-
-```bash
-redis-cli -u "$REDIS_URL" FLUSHDB
-```
-
-> [!CAUTION]
-> `FLUSHDB` clears all rate-limit windows and cached responses. Use only in emergencies.
-
 ---
 
-## Database Migrations
+## 7. Incident Response Playbook
 
-Migrations are managed by Alembic and run automatically on startup when `DATABASE_URL` is configured.
+### High Error Rate on `/api/v1/travel`
+1. Check `/api/v1/health` → `circuit_breakers`. If open, verify provider status (Groq, OpenRouter, HuggingFace status pages).
+2. Check `/api/v1/status` → `model_tiers` to confirm valid API keys.
+3. Review structured JSON logs for `[WORKFLOW ERROR]` lines.
 
-### Manual migration
+### Rate Limiting Spikes (Unexpected 429 Responses)
+1. Verify `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS` in environment.
+2. Confirm Redis connectivity; when Redis is unreachable, `EMERGENCY_IN_MEMORY_RATE_LIMIT` (default 5/min) applies.
+3. If necessary during an outage, toggle `FAIL_OPEN_REDIS=true` temporarily.
 
-```bash
-# Apply all pending migrations
-alembic upgrade head
-
-# View current revision
-alembic current
-
-# Roll back one step
-alembic downgrade -1
-```
-
-Migration files are in [`migrations/versions/`](../migrations/versions/).
-
----
-
-## Incident Response
-
-### High error rate on `/api/v1/travel`
-
-1. Check `/api/v1/health` → `circuit_breakers` — if any are `open`, reset or wait for half-open.
-2. Check LLM provider status (Groq, OpenRouter, HuggingFace status pages).
-3. Check `/api/v1/status` → `model_tiers` to confirm keys are configured.
-4. Review structured logs for `[WORKFLOW ERROR]` lines.
-
-### Rate limit false positives
-
-1. Check `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS` in `.env`.
-2. Confirm Redis is reachable; if not, `EMERGENCY_IN_MEMORY_RATE_LIMIT` (default 5/min) applies.
-3. Set `FAIL_OPEN_REDIS=true` only as a temporary emergency measure.
-
-### Worker OOM / memory growth
-
-1. Reduce `MAX_PARALLEL_AGENTS` (default 4).
-2. Reduce `LANGGRAPH_RECURSION_LIMIT` (default 15).
-3. Reduce `WEB_CONCURRENCY`.
-
-### HITL workflow stuck (pending_approval never resolved)
-
-HITL approvals expire after `APPROVAL_TTL_SECONDS` (default 900 = 15 min). To force-resolve:
-
+### Stalled HITL Approvals
+Approvals automatically expire after `APPROVAL_TTL_SECONDS` (default 900s = 15m). Force resolution:
 ```bash
 curl -X POST http://localhost:8000/api/v1/travel/approve \
   -H "Authorization: Bearer <user-token>" \
   -H "Content-Type: application/json" \
-  -d '{"thread_id": "<stuck-thread-id>", "approved": false, "feedback": "Timed out — admin override"}'
+  -d '{"thread_id": "<thread-id>", "approved": false, "feedback": "Manual operator override"}'
 ```
 
 ---
 
-## Log Reference
+## 8. Log Reference
 
-| Log prefix | Meaning |
-|------------|---------|
-| `[Checkpointer]` | PostgreSQL checkpointer initialization |
-| `[STARTUP ERROR]` | Production configuration failure — service will not start |
-| `[STARTUP WARNING]` | Non-fatal startup notice (dev mode) |
-| `[WORKFLOW ERROR]` | LangGraph workflow execution failure |
-| `[MCP]` | MCP client connection events |
-| `tripmate.travel_service` | Travel orchestration events |
-| `tripmate.app` | Application-level events |
-
-Log level is controlled by `LOG_LEVEL` (default `INFO`). Set to `DEBUG` for detailed agent step output.
-
+| Prefix / Logger | Purpose |
+|:---|:---|
+| `tripmate.access` | Structured JSON access logs with sanitized query and request IDs |
+| `tripmate.travel_service` | Multi-agent planning, specialist execution, and HITL lifecycle |
+| `tripmate.cache` | Cache hit, miss, and Redis fallback logs |
+| `[STARTUP ERROR]` | Fatal missing production configuration |
+| `[WORKFLOW ERROR]` | Graph node failure or timeout |

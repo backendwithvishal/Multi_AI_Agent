@@ -13,7 +13,8 @@ import json
 import logging
 import os
 from typing import Any, Callable, Dict, Optional
-from tripmate.cache.ttl_cache import app_cache, BoundedAsyncTTLCache
+
+from tripmate.cache.ttl_cache import BoundedAsyncTTLCache, app_cache
 from tripmate.config.settings import settings
 
 logger = logging.getLogger("tripmate.cache")
@@ -23,6 +24,7 @@ try:
 except ImportError:
     try:
         import redis  # type: ignore[import-untyped,import-not-found]
+
         aioredis = getattr(redis, "asyncio", None)
     except ImportError:
         aioredis = None  # type: ignore[assignment]
@@ -38,6 +40,7 @@ class RedisHybridCache:
         self.in_memory = fallback_cache or app_cache
 
         from tripmate.config.settings import settings
+
         if settings.is_test and not os.getenv("RUN_LIVE_REDIS_TESTS"):
             self._use_redis = False
             return
@@ -66,6 +69,7 @@ class RedisHybridCache:
                 if val is not None:
                     try:
                         from tripmate.middleware.metrics import metrics_registry
+
                         metrics_registry.record_cache_hit("redis")
                     except Exception:
                         pass
@@ -76,6 +80,7 @@ class RedisHybridCache:
                 else:
                     try:
                         from tripmate.middleware.metrics import metrics_registry
+
                         metrics_registry.record_cache_miss("redis")
                     except Exception:
                         pass
@@ -84,7 +89,13 @@ class RedisHybridCache:
                 logger.info(f"[Cache] Redis unavailable ({exc}). Using in-memory fallback.")
         return await self.in_memory.get(namespace, key_data)
 
-    async def set(self, namespace: str, key_data: Any, value: Any, ttl_seconds: Optional[int] = None) -> None:
+    async def set(
+        self,
+        namespace: str,
+        key_data: Any,
+        value: Any,
+        ttl_seconds: Optional[int] = None,
+    ) -> None:
         """Stores value in both Redis and in-memory cache."""
         await self.in_memory.set(namespace, key_data, value, ttl_seconds)
         if self._use_redis and self._redis_client:
@@ -146,6 +157,7 @@ class RedisHybridCache:
                 if val is not None:
                     try:
                         from tripmate.middleware.metrics import metrics_registry
+
                         metrics_registry.record_cache_hit("redis")
                     except Exception:
                         pass
@@ -156,6 +168,7 @@ class RedisHybridCache:
                 else:
                     try:
                         from tripmate.middleware.metrics import metrics_registry
+
                         metrics_registry.record_cache_miss("redis")
                     except Exception:
                         pass
@@ -189,7 +202,10 @@ class RedisHybridCache:
         if self._use_redis and self._redis_client:
             try:
                 cache_key = self._build_mcp_cache_key(namespace, query_data, user_id)
-                await asyncio.wait_for(self._redis_client.set(cache_key, serialized_val, ex=ttl), timeout=0.25)
+                await asyncio.wait_for(
+                    self._redis_client.set(cache_key, serialized_val, ex=ttl),
+                    timeout=0.25,
+                )
             except Exception as exc:
                 self._use_redis = False
                 logger.info(f"[Cache] Redis set_mcp failed ({exc}). Using in-memory fallback.")
@@ -257,6 +273,7 @@ class RedisHybridCache:
     async def ping(self) -> bool:
         """Pings Redis backend or returns False if in-memory fallback."""
         from tripmate.config.settings import settings
+
         if settings.is_test and not os.getenv("RUN_LIVE_REDIS_TESTS"):
             return True
         if self._use_redis and self._redis_client:
@@ -276,4 +293,3 @@ class RedisHybridCache:
 
 # Global hybrid cache instance
 hybrid_cache = RedisHybridCache()
-

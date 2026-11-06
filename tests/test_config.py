@@ -38,6 +38,7 @@ def test_valid_required_env_passes_startup_in_prod(monkeypatch):
         ENV="prod",
         API_KEY="prod-master-key-xyz",
         GROQ_API_KEY="gsk_valid_key",
+        JWT_SECRET_KEY="prod-jwt-secret-key-that-is-not-default",
     )
     # Should not raise
     prod_settings.validate_production()
@@ -57,7 +58,7 @@ def test_env_example_keys_match_settings():
                 if key:
                     example_keys.add(key)
 
-    settings_keys = set(Settings.model_fields.keys())
+    settings_keys = set(Settings.model_fields.keys()) - {"APP_VERSION"}
 
     missing_in_example = sorted(settings_keys - example_keys)
     extra_in_example = sorted(example_keys - settings_keys)

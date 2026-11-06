@@ -13,27 +13,28 @@ This file constructs the complete dynamic multi-agent execution graph:
 import asyncio
 import time
 from typing import Any, Dict, List, Optional
-from langgraph.graph import StateGraph, START, END
-from langgraph.types import interrupt
-from langchain_core.messages import AIMessage
 
-from tripmate.graph.state import TravelState
-from tripmate.graph.routing import route_from_supervisor, ROUTE_MAP
-from tripmate.agents.guardrail import run_guardrail_check, sanitize_output
-from tripmate.agents.supervisor import run_supervisor_routing
+from langchain_core.messages import AIMessage
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import interrupt
+
 from tripmate.agents.critic import critic_agent
+from tripmate.agents.guardrail import run_guardrail_check, sanitize_output
 from tripmate.agents.specialists import (
+    budget_agent_obj,
     flight_agent_obj,
     hotel_agent_obj,
-    weather_agent_obj,
-    budget_agent_obj,
     itinerary_agent_obj,
     run_final_agent,
+    weather_agent_obj,
 )
-from tripmate.services.model_router import model_router, ModelTier
-from tripmate.database import checkpointer
+from tripmate.agents.supervisor import run_supervisor_routing
 from tripmate.core.tracing import trace_span
+from tripmate.database import checkpointer
+from tripmate.graph.routing import ROUTE_MAP, route_from_supervisor
+from tripmate.graph.state import TravelState
 from tripmate.middleware.metrics import metrics_registry
+from tripmate.services.model_router import ModelTier, model_router
 
 
 def _update_latency(metrics: dict, name: str, latency_ms: float):
@@ -93,7 +94,14 @@ async def guardrail_blocked_node(state: TravelState):
 
 from langchain_core.callbacks.manager import adispatch_custom_event
 
-async def _run_agent_with_events(agent_name: str, agent_obj: Any, llm: Any, query: str, context: Optional[Dict[str, Any]] = None):
+
+async def _run_agent_with_events(
+    agent_name: str,
+    agent_obj: Any,
+    llm: Any,
+    query: str,
+    context: Optional[Dict[str, Any]] = None,
+):
     await adispatch_custom_event("agent_started", {"agent": agent_name})
     t0 = time.time()
     with trace_span(f"agent.{agent_name}", {"agent": agent_name}):
@@ -107,7 +115,10 @@ async def _run_agent_with_events(agent_name: str, agent_obj: Any, llm: Any, quer
         except Exception as exc:
             duration = time.time() - t0
             metrics_registry.record_agent_execution(agent_name, "failure", duration)
-            await adispatch_custom_event("agent_finished", {"agent": agent_name, "status": "degraded", "error": str(exc)})
+            await adispatch_custom_event(
+                "agent_finished",
+                {"agent": agent_name, "status": "degraded", "error": str(exc)},
+            )
             raise
 
 
@@ -125,17 +136,41 @@ async def parallel_specialists_node(state: TravelState):
     agent_instances = []
 
     if "flight_agent" in selected:
-        tasks.append(_run_agent_with_events("flight_agent", flight_agent_obj, reasoning_llm, query, context=agent_context))
+        tasks.append(
+            _run_agent_with_events(
+                "flight_agent",
+                flight_agent_obj,
+                reasoning_llm,
+                query,
+                context=agent_context,
+            )
+        )
         task_keys.append("flight_results")
         agent_instances.append("flight_agent")
 
     if "hotel_agent" in selected:
-        tasks.append(_run_agent_with_events("hotel_agent", hotel_agent_obj, reasoning_llm, query, context=agent_context))
+        tasks.append(
+            _run_agent_with_events(
+                "hotel_agent",
+                hotel_agent_obj,
+                reasoning_llm,
+                query,
+                context=agent_context,
+            )
+        )
         task_keys.append("hotel_results")
         agent_instances.append("hotel_agent")
 
     if "weather_agent" in selected:
-        tasks.append(_run_agent_with_events("weather_agent", weather_agent_obj, reasoning_llm, query, context=agent_context))
+        tasks.append(
+            _run_agent_with_events(
+                "weather_agent",
+                weather_agent_obj,
+                reasoning_llm,
+                query,
+                context=agent_context,
+            )
+        )
         task_keys.append("weather_results")
         agent_instances.append("weather_agent")
 
@@ -250,7 +285,10 @@ async def human_approval_node(state: TravelState):
             "question": "Do you approve this itinerary?",
             "draft_itinerary": state.get("itinerary", ""),
             "approval_request": state.get("approval_request", ""),
-            "expected_response": {"approved": True, "feedback": "Optional revision feedback"},
+            "expected_response": {
+                "approved": True,
+                "feedback": "Optional revision feedback",
+            },
         }
     )
 

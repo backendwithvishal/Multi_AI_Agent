@@ -27,7 +27,7 @@ import asyncio
 import logging
 import time
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Set, Tuple, Type
+from typing import Any, Callable, Dict, Optional, Tuple, Type
 
 from tripmate.core.singleton import SingletonMeta
 

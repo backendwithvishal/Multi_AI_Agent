@@ -13,9 +13,11 @@ import json
 import re
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
-from langchain_core.messages import SystemMessage, HumanMessage
+
 from tripmate.config.settings import settings
 from tripmate.integrations.llm_resilience import invoke_llm_with_resilience
 
@@ -51,25 +53,74 @@ class AdvancedGuardrailResult(BaseModel):
 # Known Injection & Attack Signatures
 INJECTION_SIGNATURES: List[Tuple[re.Pattern, str, GuardrailThreatCategory]] = [
     # SQL Injection Patterns
-    (re.compile(r"\b(drop\s+table|union\s+select|insert\s+into|delete\s+from|alter\s+table)\b", re.I), "SQL Injection attempt detected.", GuardrailThreatCategory.CODE_INJECTION),
-    (re.compile(r"(\bor\b\s+['\"]?1['\"]?\s*=\s*['\"]?1['\"]?|\b1\s*=\s*1\b|;\s*--)", re.I), "SQL tautology / injection probe detected.", GuardrailThreatCategory.CODE_INJECTION),
-
+    (
+        re.compile(
+            r"\b(drop\s+table|union\s+select|insert\s+into|delete\s+from|alter\s+table)\b",
+            re.I,
+        ),
+        "SQL Injection attempt detected.",
+        GuardrailThreatCategory.CODE_INJECTION,
+    ),
+    (
+        re.compile(r"(\bor\b\s+['\"]?1['\"]?\s*=\s*['\"]?1['\"]?|\b1\s*=\s*1\b|;\s*--)", re.I),
+        "SQL tautology / injection probe detected.",
+        GuardrailThreatCategory.CODE_INJECTION,
+    ),
     # Command Execution & Shell Injection
-    (re.compile(r"\b(rm\s+-rf|sudo\s+|chmod\s+\d+|format\s+c:|powershell\s+|bash\s+-c|curl\s+http|wget\s+http)\b", re.I), "Disallowed shell/system command detected.", GuardrailThreatCategory.CODE_INJECTION),
-
+    (
+        re.compile(
+            r"\b(rm\s+-rf|sudo\s+|chmod\s+\d+|format\s+c:|powershell\s+|bash\s+-c|curl\s+http|wget\s+http)\b",
+            re.I,
+        ),
+        "Disallowed shell/system command detected.",
+        GuardrailThreatCategory.CODE_INJECTION,
+    ),
     # XSS & Script Injections
-    (re.compile(r"(<script\b|javascript:|onerror\s*=|onload\s*=|document\.cookie)", re.I), "Disallowed script/XSS pattern detected.", GuardrailThreatCategory.CODE_INJECTION),
-
+    (
+        re.compile(r"(<script\b|javascript:|onerror\s*=|onload\s*=|document\.cookie)", re.I),
+        "Disallowed script/XSS pattern detected.",
+        GuardrailThreatCategory.CODE_INJECTION,
+    ),
     # Path Traversal & SSRF
-    (re.compile(r"(\.\./\.\./|\.\.\\\.\.\\|file://|169\.254\.169\.254|localhost:\d+)", re.I), "Path traversal or SSRF cloud probe detected.", GuardrailThreatCategory.CODE_INJECTION),
-
+    (
+        re.compile(r"(\.\./\.\./|\.\.\\\.\.\\|file://|169\.254\.169\.254|localhost:\d+)", re.I),
+        "Path traversal or SSRF cloud probe detected.",
+        GuardrailThreatCategory.CODE_INJECTION,
+    ),
     # Delimiter Hijack & Prompt Injection Signatures
-    (re.compile(r"(---begin\s+system---|\[inst\]|<\|im_start\|>|<system>|system\s+prompt|system:\s*you\s+are)", re.I), "System delimiter hijacking pattern detected.", GuardrailThreatCategory.PROMPT_INJECTION),
-    (re.compile(r"\b(ignore\s+previous\s+instructions|disregard\s+(all\s+)?prior\s+instructions|override\s+instructions|you\s+have\s+no\s+rules|unrestricted\s+mode|disable\s+safety|bypass\s+filters)\b", re.I), "Prompt instruction override attempt detected.", GuardrailThreatCategory.PROMPT_INJECTION),
-    (re.compile(r"\b(act\s+as\s+(a\s+)?dan|jailbreak|developer\s+mode\s+output|hypothetical\s+unrestricted)\b", re.I), "Jailbreak / roleplay bypass pattern detected.", GuardrailThreatCategory.PROMPT_INJECTION),
-
+    (
+        re.compile(
+            r"(---begin\s+system---|\[inst\]|<\|im_start\|>|<system>|system\s+prompt|system:\s*you\s+are)",
+            re.I,
+        ),
+        "System delimiter hijacking pattern detected.",
+        GuardrailThreatCategory.PROMPT_INJECTION,
+    ),
+    (
+        re.compile(
+            r"\b(ignore\s+previous\s+instructions|disregard\s+(all\s+)?prior\s+instructions|override\s+instructions|you\s+have\s+no\s+rules|unrestricted\s+mode|disable\s+safety|bypass\s+filters)\b",
+            re.I,
+        ),
+        "Prompt instruction override attempt detected.",
+        GuardrailThreatCategory.PROMPT_INJECTION,
+    ),
+    (
+        re.compile(
+            r"\b(act\s+as\s+(a\s+)?dan|jailbreak|developer\s+mode\s+output|hypothetical\s+unrestricted)\b",
+            re.I,
+        ),
+        "Jailbreak / roleplay bypass pattern detected.",
+        GuardrailThreatCategory.PROMPT_INJECTION,
+    ),
     # Secret / Credential Exfiltration Probes
-    (re.compile(r"\b(reveal\s+(api[_\s]?key|password|secret)|print\s+env\b|print\s+api_key|what\s+is\s+your\s+system\s+prompt|repeat\s+your\s+initial\s+instructions)\b", re.I), "Credential exfiltration / system prompt leak attempt detected.", GuardrailThreatCategory.CREDENTIAL_LEAK),
+    (
+        re.compile(
+            r"\b(reveal\s+(api[_\s]?key|password|secret)|print\s+env\b|print\s+api_key|what\s+is\s+your\s+system\s+prompt|repeat\s+your\s+initial\s+instructions)\b",
+            re.I,
+        ),
+        "Credential exfiltration / system prompt leak attempt detected.",
+        GuardrailThreatCategory.CREDENTIAL_LEAK,
+    ),
 ]
 
 
@@ -83,7 +134,12 @@ PII_PATTERNS = [
     # US Social Security Numbers
     (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[REDACTED_SSN]"),
     # Generic API Keys and JWT Tokens
-    (re.compile(r"\b(gsk_[a-zA-Z0-9]{20,}|sk-[a-zA-Z0-9]{20,}|AIza[0-9A-Za-z-_]{35}|eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,})\b"), "[REDACTED_SECRET_KEY]"),
+    (
+        re.compile(
+            r"\b(gsk_[a-zA-Z0-9]{20,}|sk-[a-zA-Z0-9]{20,}|AIza[0-9A-Za-z-_]{35}|eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,})\b"
+        ),
+        "[REDACTED_SECRET_KEY]",
+    ),
 ]
 
 
@@ -99,6 +155,7 @@ def mask_pii_entities(text: str) -> str:
 # Deterministic Input Validator
 # =========================================================
 
+
 def deterministic_input_check(user_query: str) -> Tuple[bool, str]:
     """
     Fast non-LLM safety validation executing:
@@ -109,13 +166,19 @@ def deterministic_input_check(user_query: str) -> Tuple[bool, str]:
         return False, "Request prompt is too short to be a valid travel query."
 
     if len(user_query) > 4000:
-        return False, "Request prompt exceeds maximum allowed limit of 4,000 characters."
+        return (
+            False,
+            "Request prompt exceeds maximum allowed limit of 4,000 characters.",
+        )
 
     query = user_query.strip()
     for pattern, reason, _ in INJECTION_SIGNATURES:
         match = pattern.search(query)
         if match:
-            return False, f"Request contains disallowed input pattern: '{match.group(0).lower()}' ({reason})"
+            return (
+                False,
+                f"Request contains disallowed input pattern: '{match.group(0).lower()}' ({reason})",
+            )
 
     return True, ""
 
@@ -123,6 +186,7 @@ def deterministic_input_check(user_query: str) -> Tuple[bool, str]:
 # =========================================================
 # Semantic & Advanced Guardrail Execution
 # =========================================================
+
 
 async def run_guardrail_check(llm: Any, user_query: str) -> Tuple[bool, str]:
     """
@@ -139,13 +203,17 @@ async def advanced_guardrail_check(llm: Any, user_query: str) -> AdvancedGuardra
     risk scores, and sanitized input.
     """
     t0 = time.time()
-    
+
     # Stage 1: Deterministic Check
     is_valid, reason = deterministic_input_check(user_query)
     if not is_valid:
         latency = round((time.time() - t0) * 1000, 2)
         # Determine threat category
-        cat = GuardrailThreatCategory.RESOURCE_ABUSE if len(user_query) > 4000 else GuardrailThreatCategory.PROMPT_INJECTION
+        cat = (
+            GuardrailThreatCategory.RESOURCE_ABUSE
+            if len(user_query) > 4000
+            else GuardrailThreatCategory.PROMPT_INJECTION
+        )
         for pattern, _, threat_cat in INJECTION_SIGNATURES:
             if pattern.search(user_query):
                 cat = threat_cat
@@ -194,7 +262,9 @@ User request: {sanitized}
         response = await invoke_llm_with_resilience(
             llm,
             [
-                SystemMessage(content="You are an input guardrail for a travel planning engine. Return strict JSON only."),
+                SystemMessage(
+                    content="You are an input guardrail for a travel planning engine. Return strict JSON only."
+                ),
                 HumanMessage(content=prompt),
             ],
             timeout=settings.LLM_TIMEOUT_SECONDS,
@@ -208,7 +278,7 @@ User request: {sanitized}
         start = cleaned.find("{")
         end = cleaned.rfind("}")
         if start != -1 and end != -1:
-            data = json.loads(cleaned[start:end+1])
+            data = json.loads(cleaned[start : end + 1])
             decision = GuardrailDecision(**data)
             latency = round((time.time() - t0) * 1000, 2)
             return AdvancedGuardrailResult(
@@ -219,7 +289,7 @@ User request: {sanitized}
                 risk_score=0.0 if decision.allowed else 0.85,
                 latency_ms=latency,
             )
-    except Exception as exc:
+    except Exception:
         pass
 
     latency = round((time.time() - t0) * 1000, 2)
@@ -238,10 +308,19 @@ User request: {sanitized}
 # =========================================================
 
 OUTPUT_LEAK_PATTERNS = [
-    (re.compile(r"postgresql://[^:]+:[^@]+@[^:]+:\d+/[a-zA-Z0-9_-]+", re.I), "[REDACTED_DATABASE_URL]"),
+    (
+        re.compile(r"postgresql://[^:]+:[^@]+@[^:]+:\d+/[a-zA-Z0-9_-]+", re.I),
+        "[REDACTED_DATABASE_URL]",
+    ),
     (re.compile(r"redis://[^:]*:[^@]+@[^:]+:\d+", re.I), "[REDACTED_REDIS_URL]"),
-    (re.compile(r"\b(gsk_[a-zA-Z0-9]{20,}|sk-[a-zA-Z0-9]{20,})\b"), "[REDACTED_API_KEY]"),
-    (re.compile(r"Traceback\s*\(most\s+recent\s+call\s+last\):.*", re.DOTALL), "Internal execution notice: processed safely."),
+    (
+        re.compile(r"\b(gsk_[a-zA-Z0-9]{20,}|sk-[a-zA-Z0-9]{20,})\b"),
+        "[REDACTED_API_KEY]",
+    ),
+    (
+        re.compile(r"Traceback\s*\(most\s+recent\s+call\s+last\):.*", re.DOTALL),
+        "Internal execution notice: processed safely.",
+    ),
 ]
 
 
@@ -285,9 +364,12 @@ def strip_delimiter_tags(text: str) -> str:
     if not isinstance(text, str):
         return text
     cleaned = text
-    for tag in ALL_DELIMITER_TAGS:
-        pattern = re.compile(re.escape(tag), re.IGNORECASE)
-        cleaned = pattern.sub("", cleaned)
+    prev = None
+    while prev != cleaned:
+        prev = cleaned
+        for tag in ALL_DELIMITER_TAGS:
+            pattern = re.compile(re.escape(tag), re.IGNORECASE)
+            cleaned = pattern.sub("", cleaned)
     return cleaned
 
 
@@ -306,5 +388,3 @@ def wrap_untrusted_tool_data(text: str, max_bytes: int = 50000) -> str:
         text = text[:max_bytes] + "\n...[truncated output]"
     cleaned = strip_delimiter_tags(text)
     return f"{UNTRUSTED_TOOL_DELIMITER_START}\n{cleaned}\n{UNTRUSTED_TOOL_DELIMITER_END}"
-
-

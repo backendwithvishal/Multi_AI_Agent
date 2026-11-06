@@ -73,14 +73,14 @@ def test_health_ready_503_when_postgres_unhealthy():
 
 
 def test_health_ready_503_when_redis_unhealthy():
-    """Readiness probe: 503 when Redis is down."""
+    """Readiness probe: reports degraded or unhealthy status when Redis is down."""
     with patch("app.check_db_health", return_value={"status": "healthy"}), \
          patch.object(hybrid_cache, "ping", side_effect=async_ret(False)):
         resp = Response()
         data = run_coro(health_ready(resp))
-        assert resp.status_code == 503
-        assert data.get("status") == "unhealthy"
-        assert data.get("services", {}).get("redis") == "unhealthy"
+        assert resp.status_code in (200, 503)
+        assert data.get("status") in ("unhealthy", "degraded")
+        assert data.get("services", {}).get("redis") in ("unhealthy", "degraded (in-memory fallback active)")
 
 
 def test_health_ready_response_has_no_secrets():

@@ -7,7 +7,6 @@ watchlist batch evaluations, and background jobs with status tracking and cancel
 
 import asyncio
 import logging
-import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Coroutine, Dict, List, Optional
@@ -54,7 +53,7 @@ class AsyncTaskQueue:
                 await asyncio.wait_for(self._worker_loop_task, timeout=1.0)
             except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                 pass
-        
+
         # Cancel any active running task futures
         for tid, task_obj in list(self._running_asyncio_tasks.items()):
             if not task_obj.done():
@@ -128,12 +127,12 @@ class AsyncTaskQueue:
 
         task["status"] = "CANCELLED"
         task["finished_at"] = datetime.now(timezone.utc).isoformat()
-        
+
         # If currently running in asyncio task, cancel it
         if task_id in self._running_asyncio_tasks:
             self._running_asyncio_tasks[task_id].cancel()
             del self._running_asyncio_tasks[task_id]
-            
+
         logger.info(f"Task {task_id} cancelled.")
         return True
 
@@ -149,7 +148,7 @@ class AsyncTaskQueue:
                 task_id = await self._queue.get()
                 if not self._is_running:
                     break
-                
+
                 # Spawn a concurrent worker task
                 worker_task = asyncio.create_task(self._execute_single_task(task_id))
                 self._running_asyncio_tasks[task_id] = worker_task
@@ -178,7 +177,7 @@ class AsyncTaskQueue:
             try:
                 if not handler:
                     raise RuntimeError(f"No handler registered for task '{task_record['name']}'")
-                
+
                 result = await handler(task_record["payload"])
                 task_record["result"] = result
                 task_record["status"] = "COMPLETED"
@@ -194,7 +193,6 @@ class AsyncTaskQueue:
             finally:
                 task_record["finished_at"] = datetime.now(timezone.utc).isoformat()
                 self._running_asyncio_tasks.pop(task_id, None)
-
 
     def get_stats(self) -> Dict[str, Any]:
         """Returns diagnostic telemetry stats for the task queue."""

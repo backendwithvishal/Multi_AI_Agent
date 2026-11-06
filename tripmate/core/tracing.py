@@ -8,9 +8,9 @@ Features:
 - LangSmith / Langfuse integration with prompt capture OFF by default.
 """
 
-from contextlib import contextmanager
 import logging
 import os
+from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional
 
 logger = logging.getLogger("tripmate.tracing")
@@ -33,8 +33,8 @@ def init_telemetry(service_name: str = "tripmate-ai"):
 
     try:
         from opentelemetry import trace
-        from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
 
         resource = Resource.create({"service.name": service_name})
         provider = TracerProvider(resource=resource)
@@ -86,6 +86,7 @@ def get_tracer(name: str = "tripmate"):
     if is_otel_enabled():
         try:
             from opentelemetry import trace
+
             return trace.get_tracer(name)
         except Exception:
             pass
@@ -104,4 +105,3 @@ def trace_span(name: str, attributes: Optional[Dict[str, Any]] = None) -> Iterat
                 except Exception:
                     pass
         yield span
-

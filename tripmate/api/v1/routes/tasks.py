@@ -10,23 +10,30 @@ Endpoints:
 
 import uuid
 from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from tripmate.api.dependencies import get_current_user
 from tripmate.schemas import APIResponse
 from tripmate.tasks.queue import task_queue
-import tripmate.tasks.workers  # Ensure default worker handlers are loaded
 
 router = APIRouter(prefix="/tasks", tags=["Background Tasks & Queue"])
 
 
 class TaskSubmitRequest(BaseModel):
-    task_name: str = Field(..., description="Name of registered background task (e.g. watchlist_price_scan, background_itinerary, system_health_audit)")
+    task_name: str = Field(
+        ...,
+        description="Name of registered background task (e.g. watchlist_price_scan, background_itinerary, system_health_audit)",
+    )
     payload: Dict[str, Any] = Field(default_factory=dict, description="Task argument parameters")
 
 
-@router.post("/submit", response_model=APIResponse[Dict[str, Any]], summary="Submit a background task")
+@router.post(
+    "/submit",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Submit a background task",
+)
 async def submit_task(
     req: TaskSubmitRequest,
     request: Request,
@@ -61,7 +68,11 @@ async def submit_task(
         )
 
 
-@router.get("/{task_id}", response_model=APIResponse[Dict[str, Any]], summary="Get task execution status")
+@router.get(
+    "/{task_id}",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Get task execution status",
+)
 async def get_task_status(
     task_id: str,
     request: Request,
@@ -76,7 +87,10 @@ async def get_task_status(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "TASK_NOT_FOUND", "message": f"Task '{task_id}' not found or access denied."},
+            detail={
+                "code": "TASK_NOT_FOUND",
+                "message": f"Task '{task_id}' not found or access denied.",
+            },
         )
     return APIResponse(
         success=True,
@@ -86,7 +100,11 @@ async def get_task_status(
     )
 
 
-@router.get("", response_model=APIResponse[List[Dict[str, Any]]], summary="List background tasks")
+@router.get(
+    "",
+    response_model=APIResponse[List[Dict[str, Any]]],
+    summary="List background tasks",
+)
 async def list_tasks(
     request: Request,
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
@@ -111,7 +129,11 @@ async def list_tasks(
     )
 
 
-@router.post("/{task_id}/cancel", response_model=APIResponse[Dict[str, Any]], summary="Cancel a task")
+@router.post(
+    "/{task_id}/cancel",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Cancel a task",
+)
 async def cancel_task(
     task_id: str,
     request: Request,
@@ -126,7 +148,10 @@ async def cancel_task(
     if not cancelled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "CANCEL_FAILED", "message": f"Could not cancel task '{task_id}'. It may already be completed or does not exist."},
+            detail={
+                "code": "CANCEL_FAILED",
+                "message": f"Could not cancel task '{task_id}'. It may already be completed or does not exist.",
+            },
         )
     return APIResponse(
         success=True,

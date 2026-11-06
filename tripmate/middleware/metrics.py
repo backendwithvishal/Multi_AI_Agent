@@ -14,14 +14,26 @@ Zero-overhead, pure-Python Prometheus metric collector that tracks:
 
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 # Standard Prometheus histogram duration buckets (in seconds)
-DEFAULT_LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+DEFAULT_LATENCY_BUCKETS = (
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+    5.0,
+    10.0,
+)
 
 # Reference LLM estimated token costs per 1,000,000 tokens
 MODEL_PRICING_PER_MILLION = {
@@ -158,29 +170,22 @@ class PrometheusMetricsRegistry:
     ) -> None:
         total_tokens = prompt_tokens + completion_tokens
         with self._lock:
-            self._llm_tokens_total[(model, "prompt")] = (
-                self._llm_tokens_total.get((model, "prompt"), 0) + prompt_tokens
-            )
+            self._llm_tokens_total[(model, "prompt")] = self._llm_tokens_total.get((model, "prompt"), 0) + prompt_tokens
             self._llm_tokens_total[(model, "completion")] = (
                 self._llm_tokens_total.get((model, "completion"), 0) + completion_tokens
             )
-            self._llm_tokens_total[(model, "total")] = (
-                self._llm_tokens_total.get((model, "total"), 0) + total_tokens
-            )
+            self._llm_tokens_total[(model, "total")] = self._llm_tokens_total.get((model, "total"), 0) + total_tokens
 
             # Calculate estimated cost
             if cost_dollars is not None:
                 est_cost = cost_dollars
             else:
                 pricing = MODEL_PRICING_PER_MILLION.get(model, DEFAULT_PRICING)
-                est_cost = (
-                    (prompt_tokens * pricing["prompt"] / 1_000_000.0)
-                    + (completion_tokens * pricing["completion"] / 1_000_000.0)
+                est_cost = (prompt_tokens * pricing["prompt"] / 1_000_000.0) + (
+                    completion_tokens * pricing["completion"] / 1_000_000.0
                 )
 
-            self._llm_cost_dollars_total[model] = (
-                self._llm_cost_dollars_total.get(model, 0.0) + est_cost
-            )
+            self._llm_cost_dollars_total[model] = self._llm_cost_dollars_total.get(model, 0.0) + est_cost
 
     def record_checkpoint_db_latency(self, duration_seconds: float) -> None:
         with self._lock:
@@ -210,7 +215,11 @@ class PrometheusMetricsRegistry:
     def _sync_circuit_breakers(self) -> None:
         """Dynamically syncs circuit breaker states from the global registry."""
         try:
-            from tripmate.integrations.circuit_breaker import circuit_breaker_registry, CircuitState
+            from tripmate.integrations.circuit_breaker import (
+                CircuitState,
+                circuit_breaker_registry,
+            )
+
             breakers = circuit_breaker_registry.get_all()
             for name, breaker in breakers.items():
                 if breaker.state == CircuitState.CLOSED:
@@ -256,7 +265,9 @@ class PrometheusMetricsRegistry:
             bucket_items = dict(self._http_request_duration_buckets)
 
         for (method, path, status_code), count in req_items:
-            lines.append(f'tripmate_http_requests_total{{method="{method}",path="{path}",status="{status_code}"}} {count}')
+            lines.append(
+                f'tripmate_http_requests_total{{method="{method}",path="{path}",status="{status_code}"}} {count}'
+            )
         lines.append("")
 
         lines.append("# HELP tripmate_http_request_duration_seconds Latency histogram of HTTP requests in seconds.")
@@ -264,9 +275,15 @@ class PrometheusMetricsRegistry:
         for (method, path), (total_dur, count) in dur_items:
             for b in DEFAULT_LATENCY_BUCKETS:
                 bcount = bucket_items.get((method, path, b), 0)
-                lines.append(f'tripmate_http_request_duration_seconds_bucket{{le="{b}",method="{method}",path="{path}"}} {bcount}')
-            lines.append(f'tripmate_http_request_duration_seconds_bucket{{le="+Inf",method="{method}",path="{path}"}} {count}')
-            lines.append(f'tripmate_http_request_duration_seconds_sum{{method="{method}",path="{path}"}} {total_dur:.6f}')
+                lines.append(
+                    f'tripmate_http_request_duration_seconds_bucket{{le="{b}",method="{method}",path="{path}"}} {bcount}'
+                )
+            lines.append(
+                f'tripmate_http_request_duration_seconds_bucket{{le="+Inf",method="{method}",path="{path}"}} {count}'
+            )
+            lines.append(
+                f'tripmate_http_request_duration_seconds_sum{{method="{method}",path="{path}"}} {total_dur:.6f}'
+            )
             lines.append(f'tripmate_http_request_duration_seconds_count{{method="{method}",path="{path}"}} {count}')
         lines.append("")
 
@@ -343,12 +360,14 @@ class PrometheusMetricsRegistry:
         lines.append("# TYPE tripmate_checkpoint_db_latency_seconds summary")
         with self._lock:
             db_sum, db_cnt = self._checkpoint_db_latencies
-        lines.append(f'tripmate_checkpoint_db_latency_seconds_sum {db_sum:.6f}')
-        lines.append(f'tripmate_checkpoint_db_latency_seconds_count {db_cnt}')
+        lines.append(f"tripmate_checkpoint_db_latency_seconds_sum {db_sum:.6f}")
+        lines.append(f"tripmate_checkpoint_db_latency_seconds_count {db_cnt}")
         lines.append("")
 
         # 9. Circuit Breaker States
-        lines.append("# HELP tripmate_circuit_breaker_state Current state of circuit breakers (0=CLOSED, 1=HALF_OPEN, 2=OPEN).")
+        lines.append(
+            "# HELP tripmate_circuit_breaker_state Current state of circuit breakers (0=CLOSED, 1=HALF_OPEN, 2=OPEN)."
+        )
         lines.append("# TYPE tripmate_circuit_breaker_state gauge")
         with self._lock:
             cb_items = list(self._circuit_breaker_states.items())

@@ -4,13 +4,16 @@ Tavily Web Search Adapter Pattern
 Adapts raw Tavily Search MCP responses into normalized search citations and evidence items.
 """
 
-from typing import Any, Dict, List
+from typing import List
+
 from pydantic import BaseModel
+
 from tripmate.schemas.agents import EvidenceItem, EvidenceType, VerificationStatus
 
 
 class NormalizedSearchCitation(BaseModel):
     """Normalized search citation result."""
+
     title: str
     content: str
     url: str = ""

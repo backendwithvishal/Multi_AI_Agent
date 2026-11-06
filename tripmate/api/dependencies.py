@@ -11,10 +11,12 @@ This module provides reusable FastAPI dependency functions for endpoint security
 import asyncio
 import secrets
 from typing import Any, Dict, Optional
-from fastapi import Header, HTTPException, Request, status
+
+from fastapi import Header, HTTPException, status
+
 from tripmate.config.settings import settings
+from tripmate.core.audit import AuditEventType, audit_logger
 from tripmate.database.store import store, verify_token
-from tripmate.core.audit import audit_logger, AuditEventType
 
 
 async def verify_api_key(
@@ -23,11 +25,11 @@ async def verify_api_key(
 ) -> str:
     """
     Validates that the incoming request contains an authentic API key.
-    
+
     In development mode (AUTH_REQUIRED=false):
       - If no key is provided, allows anonymous development access.
       - If a key is provided, validates it against settings.API_KEY if configured.
-      
+
     In production mode (AUTH_REQUIRED=true):
       - Rejects requests without an API key.
       - Validates key using constant-time string comparison.
@@ -81,7 +83,6 @@ async def verify_api_key(
             "message": "Invalid API key or access token provided.",
         },
     )
-
 
 
 async def get_current_user(
@@ -182,7 +183,7 @@ async def validate_thread_ownership(thread_id: str, request_user_id: Optional[st
 
     registered_owner = await asyncio.to_thread(store.get_thread_owner, thread_id)
     # Reject unknown or foreign thread IDs with 404 (not 403) to prevent enumeration
-    if not registered_owner or (request_user_id and registered_owner != request_user_id):
+    if not registered_owner or registered_owner != request_user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={

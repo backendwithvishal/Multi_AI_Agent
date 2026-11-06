@@ -11,7 +11,8 @@ This module provides a unified LLM routing interface to instantiate and direct r
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
+
 from dotenv import load_dotenv
 
 from tripmate.config.settings import settings
@@ -63,10 +64,7 @@ class ModelRouter(metaclass=SingletonMeta):
     @property
     def huggingface_api_key(self) -> Optional[str]:
         return (
-            settings.HUGGINGFACE_API_KEY
-            or os.getenv("HUGGINGFACE_API_KEY")
-            or os.getenv("HUGGING_FACE_API_KEY")
-            or ""
+            settings.HUGGINGFACE_API_KEY or os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HUGGING_FACE_API_KEY") or ""
         ).strip() or None
 
     def has_active_provider(self) -> bool:

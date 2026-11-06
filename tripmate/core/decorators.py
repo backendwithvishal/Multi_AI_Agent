@@ -14,7 +14,7 @@ import asyncio
 import functools
 import logging
 import time
-from typing import Any, Callable, Coroutine, Dict, Optional, Tuple, Type, Union
+from typing import Any, Callable, Coroutine, Dict, Optional, Tuple, Type
 
 logger = logging.getLogger("tripmate.decorators")
 
@@ -28,7 +28,10 @@ def timed_async(
     Decorator measuring execution duration of an async function.
     Records duration in milliseconds and optionally logs or updates a metrics dictionary.
     """
-    def decorator(func: Callable[..., Coroutine[Any, Any, Any]]) -> Callable[..., Coroutine[Any, Any, Any]]:
+
+    def decorator(
+        func: Callable[..., Coroutine[Any, Any, Any]],
+    ) -> Callable[..., Coroutine[Any, Any, Any]]:
         name = metric_name or func.__name__
 
         @functools.wraps(func)
@@ -41,7 +44,9 @@ def timed_async(
                 logger.log(log_level, f"[TIMING] {name} completed in {elapsed_ms}ms")
                 if metrics_target is not None and isinstance(metrics_target, dict):
                     metrics_target[name] = elapsed_ms
+
         return wrapper
+
     return decorator
 
 
@@ -60,7 +65,10 @@ def retry_async(
     Only catches designated retryable exceptions (transient failures). Permanent failures
     (e.g. ValueError, KeyError, authentication errors) immediately re-raise without retrying.
     """
-    def decorator(func: Callable[..., Coroutine[Any, Any, Any]]) -> Callable[..., Coroutine[Any, Any, Any]]:
+
+    def decorator(
+        func: Callable[..., Coroutine[Any, Any, Any]],
+    ) -> Callable[..., Coroutine[Any, Any, Any]]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             attempt = 0
@@ -71,16 +79,16 @@ def retry_async(
                 except retryable_exceptions as exc:
                     attempt += 1
                     if attempt > max_retries:
-                        logger.warning(
-                            f"[RETRY EXHAUSTED] {func.__name__} failed after {max_retries} retries: {exc}"
-                        )
+                        logger.warning(f"[RETRY EXHAUSTED] {func.__name__} failed after {max_retries} retries: {exc}")
                         raise
                     logger.info(
                         f"[RETRY] {func.__name__} transient failure ({exc}), retry {attempt}/{max_retries} in {delay:.2f}s..."
                     )
                     await asyncio.sleep(delay)
                     delay *= backoff_factor
+
         return wrapper
+
     return decorator
 
 
@@ -88,9 +96,14 @@ def circuit_protected(breaker: Any) -> Callable:
     """
     Decorator guarding an async callable with a CircuitBreaker instance.
     """
-    def decorator(func: Callable[..., Coroutine[Any, Any, Any]]) -> Callable[..., Coroutine[Any, Any, Any]]:
+
+    def decorator(
+        func: Callable[..., Coroutine[Any, Any, Any]],
+    ) -> Callable[..., Coroutine[Any, Any, Any]]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             return await breaker.call(func, *args, **kwargs)
+
         return wrapper
+
     return decorator

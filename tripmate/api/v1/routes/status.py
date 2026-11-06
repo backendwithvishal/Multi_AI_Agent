@@ -6,11 +6,12 @@ Endpoint:
 """
 
 from fastapi import APIRouter, Request
-from tripmate.config.settings import settings
+
 from tripmate.agents.registry import agent_registry
-from tripmate.integrations.mcp import tavily_breaker, aviation_breaker, weather_breaker
 from tripmate.cache.redis_cache import hybrid_cache
+from tripmate.config.settings import settings
 from tripmate.database.store import store
+from tripmate.integrations.mcp import aviation_breaker, tavily_breaker, weather_breaker
 from tripmate.schemas import APIResponse, SystemStatusResponse
 
 router = APIRouter(tags=["System Status & Diagnostics"])
@@ -24,7 +25,7 @@ router = APIRouter(tags=["System Status & Diagnostics"])
 )
 async def get_system_status(request: Request):
     request_id = getattr(request.state, "request_id", "req_status")
-    
+
     agent_names = [a.name for a in agent_registry.list_agents()] or [
         "flight_agent",
         "hotel_agent",

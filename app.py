@@ -1,53 +1,85 @@
 import asyncio
+import logging
 import os
 import re
 import uuid
-import uvicorn
 from contextlib import asynccontextmanager
 from typing import Optional
-from fastapi import FastAPI, Request, APIRouter, Depends, status
+
+import uvicorn
+from fastapi import APIRouter, Depends, FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
-from fastapi.exceptions import RequestValidationError, HTTPException as FastAPIHTTPException
-from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.exceptions import (
+    HTTPException as FastAPIHTTPException,
+)
+from fastapi.exceptions import (
+    RequestValidationError,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from tripmate.config.settings import settings
-from tripmate.middleware import (
-    RequestIDMiddleware,
-    SlidingWindowRateLimiter,
-    SecurityHeadersMiddleware,
-    StructuredLoggingMiddleware,
-    RequestBodyLimitMiddleware,
-)
-from tripmate.middleware.metrics import PrometheusMetricsMiddleware
-from tripmate.schemas import APIResponse, ErrorDetail, APIRootResponse, strip_control_chars
 from tripmate.api.dependencies import get_current_user
+from tripmate.api.v1.routes.admin import router as admin_v1_router
+from tripmate.api.v1.routes.ai import router as ai_v1_router
+from tripmate.api.v1.routes.ai_analysis import router as ai_analysis_v1_router
+from tripmate.api.v1.routes.approval import router as approval_v1_router
+from tripmate.api.v1.routes.auth import router as auth_v1_router
+from tripmate.api.v1.routes.booking import router as booking_v1_router
+from tripmate.api.v1.routes.budget import (
+    legacy_router as financial_v1_router,
+)
+from tripmate.api.v1.routes.budget import (
+    router as budget_v1_router,
+)
+from tripmate.api.v1.routes.documents import (
+    legacy_router as assets_v1_router,
+)
+from tripmate.api.v1.routes.documents import (
+    router as documents_v1_router,
+)
 
 # Import API Domain Routers
 from tripmate.api.v1.routes.health import router as health_v1_router
-from tripmate.api.v1.routes.status import router as status_v1_router
-from tripmate.api.v1.routes.ai_analysis import router as ai_analysis_v1_router
-from tripmate.api.v1.routes.auth import router as auth_v1_router
-from tripmate.api.v1.routes.watchlists import router as watchlists_v1_router
-from tripmate.api.v1.routes.alerts import router as alerts_v1_router
-from tripmate.api.v1.routes.assets import router as assets_v1_router
-from tripmate.api.v1.routes.financial import router as financial_v1_router
-from tripmate.api.v1.routes.admin import router as admin_v1_router
-from tripmate.api.v1.routes.ai import router as ai_v1_router
-from tripmate.api.v1.routes.travel import router as travel_v1_router
-from tripmate.api.v1.routes.approval import router as approval_v1_router
-from tripmate.api.v1.routes.runs import router as runs_v1_router
 from tripmate.api.v1.routes.metrics import router as metrics_v1_router
+from tripmate.api.v1.routes.notifications import (
+    legacy_router as alerts_v1_router,
+)
+from tripmate.api.v1.routes.notifications import (
+    price_alerts_router as price_alerts_v1_router,
+)
+from tripmate.api.v1.routes.notifications import (
+    router as notifications_v1_router,
+)
+from tripmate.api.v1.routes.price_watches import (
+    legacy_router as watchlists_v1_router,
+)
+from tripmate.api.v1.routes.price_watches import (
+    router as price_watches_v1_router,
+)
+from tripmate.api.v1.routes.runs import router as runs_v1_router
+from tripmate.api.v1.routes.status import router as status_v1_router
 from tripmate.api.v1.routes.tasks import router as tasks_v1_router
-from tripmate.api.v1.routes.booking import router as booking_v1_router
+from tripmate.api.v1.routes.travel import router as travel_v1_router
+from tripmate.cache.redis_cache import hybrid_cache
+from tripmate.config.settings import settings
+from tripmate.middleware import (
+    RequestBodyLimitMiddleware,
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+    SlidingWindowRateLimiter,
+    StructuredLoggingMiddleware,
+)
+from tripmate.middleware.metrics import PrometheusMetricsMiddleware
+from tripmate.schemas import (
+    APIResponse,
+    APIRootResponse,
+    ErrorDetail,
+    strip_control_chars,
+)
 from tripmate.services.travel_service import travel_service
 from tripmate.tasks import task_queue
-
-
-import logging
-from tripmate.cache.redis_cache import hybrid_cache
 
 logger = logging.getLogger("tripmate.app")
 
@@ -66,12 +98,14 @@ async def lifespan(app: FastAPI):
                 logger.warning(f"[STARTUP WARNING] {exc}")
 
         # Initialize and apply database migrations if PostgreSQL is configured and accessible
-        from tripmate.database import get_formatted_db_url, get_db_pool, close_db_pools
+        from tripmate.database import close_db_pools, get_db_pool, get_formatted_db_url
+
         if get_formatted_db_url():
             try:
                 if get_db_pool():
                     from tripmate.database.migrator import run_migrations_up
                     from tripmate.database.store import store
+
                     mig_res = run_migrations_up("head")
                     if mig_res.get("success"):
                         logger.info("PostgreSQL database migrations verified and up to date.")
@@ -86,6 +120,7 @@ async def lifespan(app: FastAPI):
         # Initialize persistent MCP client manager
         try:
             from mcp_client import mcp_manager
+
             await mcp_manager.startup()
         except Exception as exc:
             logger.warning(f"Notice during MCP Manager startup: {exc}")
@@ -100,18 +135,24 @@ async def lifespan(app: FastAPI):
         try:
             # Finish or cancel in-flight active workflow runs
             from tripmate.services.travel_service import ACTIVE_RUNS
+
             for task in list(ACTIVE_RUNS):
                 if not task.done():
                     task.cancel()
             if ACTIVE_RUNS:
-                await asyncio.gather(*[t for t in list(ACTIVE_RUNS) if not t.done()], return_exceptions=True)
+                await asyncio.gather(
+                    *[t for t in list(ACTIVE_RUNS) if not t.done()],
+                    return_exceptions=True,
+                )
                 ACTIVE_RUNS.clear()
 
             await task_queue.stop()
             from mcp_client import mcp_manager
+
             await mcp_manager.shutdown()
             await hybrid_cache.aclose()
             from tripmate.database import close_checkpointer, close_db_pools
+
             close_checkpointer()
             close_db_pools()
         except Exception as exc:
@@ -138,20 +179,19 @@ app = FastAPI(
 )
 
 # Register HTTP middleware chain in order of execution
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestBodyLimitMiddleware, max_body_bytes=settings.MAX_REQUEST_BODY_BYTES)
+# In Starlette, middlewares wrap in reverse order: last added is outermost.
+cors_allow_credentials = False if ("*" in settings.ALLOWED_ORIGINS) else True
+
 app.add_middleware(PrometheusMetricsMiddleware)
 app.add_middleware(StructuredLoggingMiddleware)
-app.add_middleware(RequestIDMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware, max_body_bytes=settings.MAX_REQUEST_BODY_BYTES)
 app.add_middleware(
     SlidingWindowRateLimiter,
     max_requests=settings.RATE_LIMIT_REQUESTS,
     window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
     protected_prefixes=("/api/",),
 )
-
-# Configure CORS: Wildcard origin "*" NEVER allowed with credentials per W3C specification
-cors_allow_credentials = False if ("*" in settings.ALLOWED_ORIGINS) else True
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -159,6 +199,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestIDMiddleware)
 
 
 from tripmate.core.errors import AppException
@@ -246,8 +287,6 @@ async def global_unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-
-
 # =========================================================
 # Mount Versioned API Routes (/api/v1) & Global Endpoints
 # =========================================================
@@ -269,16 +308,21 @@ v1_router.include_router(ai_analysis_v1_router)
 # 4. Authentication & RBAC
 v1_router.include_router(auth_v1_router)
 
-# 5. Watchlists
+# 5. Travel Price Watches
+v1_router.include_router(price_watches_v1_router)
 v1_router.include_router(watchlists_v1_router)
 
 # 6. Alerts & Notifications
+v1_router.include_router(notifications_v1_router)
+v1_router.include_router(price_alerts_v1_router)
 v1_router.include_router(alerts_v1_router)
 
-# 7. Assets & Documents
+# 7. Travel Documents & Assets
+v1_router.include_router(documents_v1_router)
 v1_router.include_router(assets_v1_router)
 
-# 8. Financial Engine
+# 8. Travel Budget & Financial Calculations
+v1_router.include_router(budget_v1_router)
 v1_router.include_router(financial_v1_router)
 
 # 9. Administration
@@ -436,9 +480,13 @@ async def legacy_approve(
     if not request_data.approved and not request_data.feedback.strip():
         return JSONResponse(
             status_code=400,
-            content={"success": False, "error": "Please provide revision feedback when rejecting the draft."},
+            content={
+                "success": False,
+                "error": "Please provide revision feedback when rejecting the draft.",
+            },
         )
-    from tripmate.core.audit import audit_logger, AuditEventType
+    from tripmate.core.audit import AuditEventType, audit_logger
+
     client_ip = request.client.host if request.client else "unknown"
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
     audit_logger.record(
@@ -461,6 +509,7 @@ async def legacy_approve(
 
 
 from fastapi import Response
+
 from tripmate.database import check_db_health
 
 
@@ -474,42 +523,56 @@ async def health_live():
 async def health_ready(response: Response):
     """Readiness Probe: Verifies PostgreSQL, Redis, and MCP connectivity without leaking secrets."""
     db_health = check_db_health()
-    db_ok = db_health.get("status") in ("healthy", "disabled") if settings.is_dev else (db_health.get("status") == "healthy")
+    db_ok = (
+        db_health.get("status") in ("healthy", "disabled")
+        if (settings.is_dev or settings.is_test)
+        else (db_health.get("status") == "healthy")
+    )
 
     redis_ok = True
+    redis_degraded = False
     try:
         redis_ping = await hybrid_cache.ping()
         if not redis_ping:
-            redis_ok = False
+            if getattr(hybrid_cache, "in_memory", None) is not None:
+                redis_degraded = True
+            else:
+                redis_ok = False
     except Exception:
-        redis_ok = False
+        if getattr(hybrid_cache, "in_memory", None) is not None:
+            redis_degraded = True
+        else:
+            redis_ok = False
 
     # MCP service availability
     mcp_ok = True
     try:
         from mcp_client import mcp_manager
+
         if hasattr(mcp_manager, "is_healthy") and not mcp_manager.is_healthy():
             mcp_ok = False
     except Exception:
         mcp_ok = True
 
-    is_ready = db_ok and redis_ok and mcp_ok
+    is_ready = db_ok and (redis_ok or redis_degraded) and mcp_ok
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {
             "status": "unhealthy",
             "services": {
                 "database": "healthy" if db_ok else "unhealthy",
-                "redis": "healthy" if redis_ok else "unhealthy",
+                "redis": "healthy"
+                if redis_ok and not redis_degraded
+                else ("degraded" if redis_degraded else "unhealthy"),
                 "mcp": "healthy" if mcp_ok else "unhealthy",
             },
         }
 
     return {
-        "status": "ready",
+        "status": "degraded" if redis_degraded else "ready",
         "services": {
             "database": "healthy",
-            "redis": "healthy",
+            "redis": "degraded (in-memory fallback active)" if redis_degraded else "healthy",
             "mcp": "healthy",
         },
     }
@@ -558,15 +621,18 @@ if __name__ == "__main__":
     else:
         # Production mode: gunicorn + uvicorn workers, proxy headers, graceful timeout, keep-alive
         import sys
+
         workers = int(os.getenv("WEB_CONCURRENCY", os.getenv("WORKERS", str(settings.WEB_CONCURRENCY))))
         graceful_timeout = int(os.getenv("GRACEFUL_TIMEOUT", str(settings.GRACEFUL_TIMEOUT)))
         keep_alive = int(os.getenv("KEEP_ALIVE", str(settings.KEEP_ALIVE)))
 
         if sys.platform != "win32":
             import subprocess
+
             cmd = [
                 "gunicorn",
-                "-c", "gunicorn.conf.py",
+                "-c",
+                "gunicorn.conf.py",
                 "app:app",
             ]
             subprocess.run(cmd)

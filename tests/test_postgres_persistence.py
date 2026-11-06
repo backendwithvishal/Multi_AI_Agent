@@ -23,12 +23,15 @@ from tripmate.graph.workflow import travel_workflow_graph
 @pytest.fixture(scope="module")
 def db_url():
     url = get_formatted_db_url()
-    assert url is not None, "DATABASE_URL is required for PostgreSQL persistence tests"
+    if not url:
+        pytest.skip("DATABASE_URL not configured; skipping PostgreSQL persistence tests")
     return url
 
 
 def test_postgres_connectivity_and_health():
     """Verifies database connectivity and detailed health check report."""
+    if not get_formatted_db_url():
+        pytest.skip("DATABASE_URL not configured; skipping PostgreSQL persistence tests")
     health = check_db_health()
     assert health["status"] == "healthy"
     assert health["connected"] is True

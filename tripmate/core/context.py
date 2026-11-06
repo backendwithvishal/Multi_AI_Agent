@@ -13,15 +13,9 @@ import hashlib
 from typing import Optional
 
 # Async-safe request context variables
-current_request_id: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "current_request_id", default=""
-)
-current_user_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "current_user_id", default=None
-)
-current_thread_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "current_thread_id", default=None
-)
+current_request_id: contextvars.ContextVar[str] = contextvars.ContextVar("current_request_id", default="")
+current_user_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("current_user_id", default=None)
+current_thread_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("current_thread_id", default=None)
 
 
 def set_request_context(
@@ -61,4 +55,3 @@ def hash_thread_id(thread_id: Optional[str]) -> Optional[str]:
         return None
     digest = hashlib.sha256(thread_id.strip().encode("utf-8")).hexdigest()
     return f"th_hash_{digest[:16]}"
-
