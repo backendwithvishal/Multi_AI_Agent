@@ -10,11 +10,11 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import JSONResponse
 
 from tripmate.core.context import (
-    set_request_context,
     get_request_id,
-    get_user_id,
     get_thread_id,
+    get_user_id,
     hash_thread_id,
+    set_request_context,
 )
 from tripmate.core.logging import redact_sensitive_data
 from tripmate.middleware.metrics import metrics_registry
@@ -119,7 +119,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if "text/event-stream" in content_type:
             response.headers["Cache-Control"] = "no-cache, no-transform"
             response.headers["X-Accel-Buffering"] = "no"
-        elif request.url.path.startswith("/api/") or request.url.path in ("/health", "/metrics"):
+        elif request.url.path.startswith("/api/") or request.url.path in (
+            "/health",
+            "/metrics",
+        ):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
@@ -167,15 +170,13 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
         self._last_cleanup = now
         window_start = now - self.window_seconds
         expired_ips = [
-            ip for ip, timestamps in self._requests.items()
-            if not timestamps or timestamps[-1] <= window_start
+            ip for ip, timestamps in self._requests.items() if not timestamps or timestamps[-1] <= window_start
         ]
         for ip in expired_ips:
             del self._requests[ip]
 
         expired_users = [
-            uid for uid, timestamps in self._user_requests.items()
-            if not timestamps or timestamps[-1] <= window_start
+            uid for uid, timestamps in self._user_requests.items() if not timestamps or timestamps[-1] <= window_start
         ]
         for uid in expired_users:
             del self._user_requests[uid]
@@ -198,6 +199,7 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
         if not is_trusted:
             try:
                 import ipaddress
+
                 peer_obj = ipaddress.ip_address(peer_ip)
                 for t in trusted:
                     if "/" in t and peer_obj in ipaddress.ip_network(t, strict=False):
@@ -228,7 +230,8 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
             token = request.headers.get("X-API-Key", "").strip()
 
         if token:
-            from tripmate.database.store import verify_token, store
+            from tripmate.database.store import store, verify_token
+
             claims = verify_token(token)
             if claims and claims.get("uid"):
                 return claims["uid"]
@@ -240,6 +243,7 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
     async def _is_rate_limited_redis(self, client_ip: str, user_id: Optional[str] = None) -> Tuple[Optional[bool], int]:
         """Performs atomic distributed sliding window check using Redis pipeline."""
         from tripmate.cache.redis_cache import hybrid_cache
+
         if not hybrid_cache._use_redis or not hybrid_cache._redis_client:
             return None, 0
 
@@ -305,6 +309,7 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
             is_llm_route = any(path.startswith(route) for route in self.LLM_ROUTES)
 
             from tripmate.cache.redis_cache import hybrid_cache
+
             redis_available = bool(hybrid_cache._use_redis and hybrid_cache._redis_client and not settings.is_test)
 
             is_limited: Optional[bool] = None
@@ -360,5 +365,3 @@ class SlidingWindowRateLimiter(BaseHTTPMiddleware):
             response.headers["X-RateLimit-Limit"] = str(self.max_requests)
             response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
-
-

@@ -23,6 +23,6 @@ def route_from_supervisor(state: TravelState) -> str:
     if not state.get("guardrail_allowed", True):
         # Stop workflow early if safety guardrail rejected the request
         return "guardrail_blocked"
-    
+
     # Send request to parallel specialist agents (Flight, Hotel, Weather)
     return "parallel_specialists"

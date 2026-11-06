@@ -6,22 +6,33 @@ import asyncio
 import logging
 import random
 from typing import Any, Callable, Dict, Optional
+
 from mcp_client import (
-    tavily_mcp_search as raw_tavily_mcp_search,
     aviation_mcp_call as raw_aviation_mcp_call,
-    weather_mcp_search as raw_weather_mcp_search,
-    forecast_mcp_search as raw_forecast_mcp_search,
+)
+from mcp_client import (
     extract_destination as raw_extract_destination,
+)
+from mcp_client import (
+    forecast_mcp_search as raw_forecast_mcp_search,
+)
+from mcp_client import (
     mcp_manager,
 )
+from mcp_client import (
+    tavily_mcp_search as raw_tavily_mcp_search,
+)
+from mcp_client import (
+    weather_mcp_search as raw_weather_mcp_search,
+)
+from tripmate.cache.redis_cache import hybrid_cache
+from tripmate.config.settings import settings
+from tripmate.core.context import get_request_id
 from tripmate.integrations.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerOpenException,
     circuit_breaker_registry,
 )
-from tripmate.config.settings import settings
-from tripmate.core.context import get_request_id
-from tripmate.cache.redis_cache import hybrid_cache
 
 logger = logging.getLogger("tripmate.mcp")
 
@@ -111,6 +122,7 @@ async def safe_aviation_call(
     user_id: Optional[str] = None,
 ) -> Any:
     """Safe AviationStack call with Redis caching, retry, timeout, and circuit breaker."""
+
     async def _fetch():
         async def _call():
             return await asyncio.wait_for(
@@ -142,6 +154,7 @@ async def safe_aviation_call(
 
 async def safe_weather_search(city: str, user_id: Optional[str] = None) -> str:
     """Safe OpenWeather call with Redis caching, timeout, and circuit breaker protection."""
+
     async def _fetch():
         async def _call_current():
             return await asyncio.wait_for(
@@ -193,4 +206,3 @@ async def safe_extract_destination(query: str) -> str:
 tavily_search = safe_tavily_search
 aviation_call = safe_aviation_call
 weather_search = safe_weather_search
-

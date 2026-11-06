@@ -13,13 +13,14 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
+
 from fastapi import HTTPException, Request, status
-from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 
-from tripmate.config.settings import settings
 from tripmate.api.dependencies import validate_thread_ownership
+from tripmate.config.settings import settings
 from tripmate.core.singleton import SingletonMeta
 from tripmate.database.store import store
 from tripmate.graph.state import TravelState
@@ -121,19 +122,13 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optio
         "answer": answer,
         "requires_approval": interrupt_data is not None,
         "approval_request": (
-            interrupt_data.get("approval_request", "")
-            if interrupt_data
-            else result.get("approval_request", "")
+            interrupt_data.get("approval_request", "") if interrupt_data else result.get("approval_request", "")
         ),
         "flight_results": result.get("flight_results", ""),
         "hotel_results": result.get("hotel_results", ""),
         "weather_results": result.get("weather_results", ""),
         "budget_results": result.get("budget_results", ""),
-        "itinerary": (
-            interrupt_data.get("draft_itinerary", "")
-            if interrupt_data
-            else result.get("itinerary", "")
-        ),
+        "itinerary": (interrupt_data.get("draft_itinerary", "") if interrupt_data else result.get("itinerary", "")),
         "selected_agents": result.get("selected_agents", []),
         "trip_constraints": result.get("trip_constraints", {}),
         "supervisor_reasoning": result.get("supervisor_reasoning", ""),
@@ -175,7 +170,10 @@ class TravelService(metaclass=SingletonMeta):
             if registered_owner and registered_owner != user_id:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"code": "THREAD_NOT_FOUND", "message": f"Thread '{thread_id}' not found."},
+                    detail={
+                        "code": "THREAD_NOT_FOUND",
+                        "message": f"Thread '{thread_id}' not found.",
+                    },
                 )
             self._store.register_thread_owner(thread_id, user_id)
 
@@ -223,12 +221,19 @@ class TravelService(metaclass=SingletonMeta):
         if not state or not getattr(state, "values", None):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "THREAD_NOT_FOUND", "message": f"Thread ID '{thread_id}' not found or has no execution history."},
+                detail={
+                    "code": "THREAD_NOT_FOUND",
+                    "message": f"Thread ID '{thread_id}' not found or has no execution history.",
+                },
             )
 
         # Idempotency check 2: if thread has already finished approval and completed
         state_values = getattr(state, "values", {}) or {}
-        if not getattr(state, "next", None) and state_values.get("status") in ("APPROVED", "REVISION_REQUESTED", "COMPLETED"):
+        if not getattr(state, "next", None) and state_values.get("status") in (
+            "APPROVED",
+            "REVISION_REQUESTED",
+            "COMPLETED",
+        ):
             serialized = serialize_graph_result(state_values, thread_id)
             self._approval_history[thread_id] = serialized
             return serialized
@@ -237,7 +242,10 @@ class TravelService(metaclass=SingletonMeta):
         if not getattr(state, "next", None) or "human_approval" not in getattr(state, "next", ()):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "INVALID_WORKFLOW_STATE", "message": f"Thread ID '{thread_id}' is not currently waiting for approval."},
+                detail={
+                    "code": "INVALID_WORKFLOW_STATE",
+                    "message": f"Thread ID '{thread_id}' is not currently waiting for approval.",
+                },
             )
 
         # TTL validation on pending approval
@@ -245,7 +253,10 @@ class TravelService(metaclass=SingletonMeta):
         if created_at and (time.time() - created_at > settings.APPROVAL_TTL_SECONDS):
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
-                detail={"code": "APPROVAL_EXPIRED", "message": f"Approval request for thread '{thread_id}' has expired."},
+                detail={
+                    "code": "APPROVAL_EXPIRED",
+                    "message": f"Approval request for thread '{thread_id}' has expired.",
+                },
             )
 
         result = await travel_workflow_graph.ainvoke(
@@ -276,6 +287,7 @@ class TravelService(metaclass=SingletonMeta):
             ACTIVE_RUNS.add(current_task)
             try:
                 from tripmate.middleware.metrics import metrics_registry
+
                 metrics_registry.inc_inflight_runs()
             except Exception:
                 pass
@@ -289,7 +301,10 @@ class TravelService(metaclass=SingletonMeta):
                 if registered_owner and registered_owner != user_id:
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
-                        detail={"code": "THREAD_NOT_FOUND", "message": f"Thread '{thread_id}' not found."},
+                        detail={
+                            "code": "THREAD_NOT_FOUND",
+                            "message": f"Thread '{thread_id}' not found.",
+                        },
                     )
                 await asyncio.to_thread(self._store.register_thread_owner, thread_id, user_id)
 
@@ -333,14 +348,30 @@ class TravelService(metaclass=SingletonMeta):
 
                 # 2. Node / step starts
                 elif ev_type == "on_chain_start":
-                    if ev_name in ("supervisor", "parallel_specialists", "critic", "itinerary_agent", "human_approval", "final_agent", "guardrail_blocked"):
+                    if ev_name in (
+                        "supervisor",
+                        "parallel_specialists",
+                        "critic",
+                        "itinerary_agent",
+                        "human_approval",
+                        "final_agent",
+                        "guardrail_blocked",
+                    ):
                         yield f"event: step.update\ndata: {json.dumps({'step': ev_name, 'status': 'started'})}\n\n"
                         if ev_name == "parallel_specialists":
                             yield f"event: specialists.started\ndata: {json.dumps({'status': 'running'})}\n\n"
 
                 # 3. Node / step completions & decisions
                 elif ev_type == "on_chain_end":
-                    if ev_name in ("supervisor", "parallel_specialists", "critic", "itinerary_agent", "human_approval", "final_agent", "guardrail_blocked"):
+                    if ev_name in (
+                        "supervisor",
+                        "parallel_specialists",
+                        "critic",
+                        "itinerary_agent",
+                        "human_approval",
+                        "final_agent",
+                        "guardrail_blocked",
+                    ):
                         yield f"event: step.update\ndata: {json.dumps({'step': ev_name, 'status': 'completed'})}\n\n"
                         output_data = data.get("output")
                         if ev_name == "supervisor" and isinstance(output_data, dict):
@@ -395,6 +426,7 @@ class TravelService(metaclass=SingletonMeta):
                 ACTIVE_RUNS.discard(current_task)
                 try:
                     from tripmate.middleware.metrics import metrics_registry
+
                     metrics_registry.dec_inflight_runs()
                 except Exception:
                     pass

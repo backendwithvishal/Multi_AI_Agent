@@ -1,12 +1,13 @@
 import uuid
 from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from tripmate.schemas import ApprovalRequest, APIResponse, ErrorDetail
-from tripmate.services.travel_service import travel_service
 from tripmate.api.dependencies import get_current_user
-from tripmate.core.audit import audit_logger, AuditEventType
+from tripmate.core.audit import AuditEventType, audit_logger
+from tripmate.schemas import APIResponse, ApprovalRequest, ErrorDetail
+from tripmate.services.travel_service import travel_service
 
 router = APIRouter(prefix="/travel", tags=["Human-in-the-Loop Approval API"])
 
@@ -39,8 +40,16 @@ async def approve_travel_plan(
             ).model_dump(),
         )
 
+    client_ip = request.client.host if request.client else "unknown"
+
     try:
-        client_ip = request.client.host if request.client else "unknown"
+        result = await travel_service.resume_travel_plan(
+            thread_id=request_data.thread_id,
+            approved=request_data.approved,
+            feedback=request_data.feedback,
+            user_id=effective_user_id,
+        )
+
         audit_logger.record(
             event_type=AuditEventType.APPROVAL_DECISION,
             action="itinerary_approved" if request_data.approved else "itinerary_rejected",
@@ -49,14 +58,10 @@ async def approve_travel_plan(
             status="success",
             client_ip=client_ip,
             request_id=request_id,
-            details={"approved": request_data.approved, "feedback": request_data.feedback},
-        )
-
-        result = await travel_service.resume_travel_plan(
-            thread_id=request_data.thread_id,
-            approved=request_data.approved,
-            feedback=request_data.feedback,
-            user_id=effective_user_id,
+            details={
+                "approved": request_data.approved,
+                "feedback": request_data.feedback,
+            },
         )
 
         return APIResponse(
@@ -65,9 +70,29 @@ async def approve_travel_plan(
             error=None,
             request_id=request_id,
         )
-    except HTTPException:
+    except HTTPException as http_exc:
+        audit_logger.record(
+            event_type=AuditEventType.APPROVAL_DECISION,
+            action="itinerary_approved" if request_data.approved else "itinerary_rejected",
+            actor=effective_user_id or "anonymous",
+            target_id=request_data.thread_id,
+            status="failure",
+            client_ip=client_ip,
+            request_id=request_id,
+            details={"approved": request_data.approved, "error": http_exc.detail},
+        )
         raise
     except Exception as exc:
+        audit_logger.record(
+            event_type=AuditEventType.APPROVAL_DECISION,
+            action="itinerary_approved" if request_data.approved else "itinerary_rejected",
+            actor=effective_user_id or "anonymous",
+            target_id=request_data.thread_id,
+            status="failure",
+            client_ip=client_ip,
+            request_id=request_id,
+            details={"approved": request_data.approved, "error": str(exc)},
+        )
         return JSONResponse(
             status_code=500,
             content=APIResponse(

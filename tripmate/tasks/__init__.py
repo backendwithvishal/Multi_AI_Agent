@@ -1,8 +1,8 @@
-from tripmate.tasks.queue import task_queue, AsyncTaskQueue
+from tripmate.tasks.queue import AsyncTaskQueue, task_queue
 from tripmate.tasks.workers import (
-    task_watchlist_price_scan,
     task_background_itinerary,
     task_system_health_audit,
+    task_watchlist_price_scan,
 )
 
 __all__ = [

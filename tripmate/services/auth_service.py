@@ -8,8 +8,13 @@ import secrets
 from typing import Any, Dict, Optional
 
 from tripmate.config.settings import settings
-from tripmate.database.store import generate_token, hash_password, verify_password, store
-from tripmate.schemas import TokenResponse, UserLoginRequest, UserProfile, UserRegisterRequest
+from tripmate.database.store import (
+    generate_token,
+    hash_password,
+    store,
+    verify_password,
+)
+from tripmate.schemas import UserLoginRequest, UserProfile, UserRegisterRequest
 
 
 class AuthService:

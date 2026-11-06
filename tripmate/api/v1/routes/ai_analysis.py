@@ -6,13 +6,15 @@ Endpoint:
 """
 
 from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, Request
-from tripmate.schemas import APIResponse, AIAnalysisRequest, AIAnalysisResponse
-from tripmate.agents.planner import planner
+
 from tripmate.agents.critic import critic_agent
 from tripmate.agents.guardrail import deterministic_input_check
-from tripmate.services.model_router import model_router, ModelTier
+from tripmate.agents.planner import planner
 from tripmate.api.dependencies import get_current_user
+from tripmate.schemas import AIAnalysisRequest, AIAnalysisResponse, APIResponse
+from tripmate.services.model_router import ModelTier, model_router
 
 router = APIRouter(prefix="/ai", tags=["AI Analysis & Intelligence"])
 
@@ -29,7 +31,7 @@ async def analyze_travel_request(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_ai_analysis")
-    
+
     # Check guardrails first
     is_safe, reason = deterministic_input_check(req.query)
     if not is_safe:
@@ -48,7 +50,7 @@ async def analyze_travel_request(
         )
 
     reasoning_llm = model_router.get_model(ModelTier.REASONING)
-    
+
     # 1. Generate Task DAG plan to extract constraints and dependencies
     plan_dag = await planner.create_plan(reasoning_llm, req.query)
     extracted_dest = req.destination or plan_dag.trip_constraints.get("destination") or "Destination"

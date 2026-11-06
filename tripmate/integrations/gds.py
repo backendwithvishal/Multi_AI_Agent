@@ -5,12 +5,11 @@ Provides flight and hotel search, real-time fare pricing lock, and booking reser
 capabilities with circuit-breaker protection and bounded caching.
 """
 
-import asyncio
 import logging
 import secrets
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from tripmate.cache.ttl_cache import BoundedAsyncTTLCache
 from tripmate.config.settings import settings
@@ -51,7 +50,11 @@ class GDSBookingClient(metaclass=SingletonMeta):
             return cached
 
         async def _execute():
-            base_price = 350.00 if cabin_class.upper() == "ECONOMY" else (780.00 if cabin_class.upper() == "PREMIUM" else 1450.00)
+            base_price = (
+                350.00
+                if cabin_class.upper() == "ECONOMY"
+                else (780.00 if cabin_class.upper() == "PREMIUM" else 1450.00)
+            )
             offers = [
                 {
                     "offer_id": f"flt_off_{secrets.token_hex(6)}",
@@ -126,7 +129,12 @@ class GDSBookingClient(metaclass=SingletonMeta):
                     "room_type": "Deluxe King Room",
                     "price_per_night": 220.00,
                     "currency": "USD",
-                    "amenities": ["Free High-Speed WiFi", "Spa & Wellness", "Fitness Center", "Breakfast Included"],
+                    "amenities": [
+                        "Free High-Speed WiFi",
+                        "Spa & Wellness",
+                        "Fitness Center",
+                        "Breakfast Included",
+                    ],
                     "free_cancellation": True,
                 },
                 {
@@ -155,12 +163,18 @@ class GDSBookingClient(metaclass=SingletonMeta):
         return result
 
     async def lock_price(
-        self, offer_id: str, offer_type: str, total_price: float, currency: str = "USD"
+        self,
+        offer_id: str,
+        offer_type: str,
+        total_price: float,
+        currency: str = "USD",
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Locks a fare or hotel rate for 15 minutes before reservation."""
         lock_id = f"lock_{secrets.token_hex(8)}"
         record = {
             "lock_id": lock_id,
+            "user_id": user_id,
             "offer_id": offer_id,
             "offer_type": offer_type,
             "locked_price": total_price,
@@ -183,6 +197,8 @@ class GDSBookingClient(metaclass=SingletonMeta):
         lock = self._price_locks.get(lock_id)
         if not lock:
             raise ValueError(f"Price lock '{lock_id}' does not exist.")
+        if lock.get("user_id") and lock["user_id"] != user_id:
+            raise ValueError(f"Price lock '{lock_id}' does not belong to user '{user_id}'.")
         if lock["expires_at"] < time.time():
             raise ValueError(f"Price lock '{lock_id}' has expired. Please re-lock price.")
         if lock["status"] == "BOOKED":

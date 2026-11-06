@@ -16,9 +16,9 @@ import logging
 import secrets
 import time
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
 
 from tripmate.config.settings import settings
 from tripmate.core.singleton import SingletonMeta
@@ -30,6 +30,7 @@ logger = logging.getLogger("tripmate.store")
 # =========================================================
 # Password Hashing & Token Utilities
 # =========================================================
+
 
 def hash_password(password: str, salt: Optional[str] = None) -> str:
     """Hashes a password using PBKDF2-HMAC-SHA256 with a unique salt."""
@@ -125,6 +126,7 @@ def _format_float(val: Any) -> Optional[float]:
 # =========================================================
 # Unified Data Repository
 # =========================================================
+
 
 class DataStore(metaclass=SingletonMeta):
     """Thread-safe unified data store managing platform entities with PostgreSQL persistence."""
@@ -242,13 +244,20 @@ class DataStore(metaclass=SingletonMeta):
                             """
                             INSERT INTO usage_budgets (id, user_id, date_str, token_count, request_count, updated_at)
                             VALUES (%s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (user_id, date_str) 
-                            DO UPDATE SET 
+                            ON CONFLICT (user_id, date_str)
+                            DO UPDATE SET
                                 token_count = usage_budgets.token_count + EXCLUDED.token_count,
                                 request_count = usage_budgets.request_count + EXCLUDED.request_count,
                                 updated_at = EXCLUDED.updated_at;
                             """,
-                            (budget_id, user_id, date_str, tokens, requests, datetime.now(timezone.utc)),
+                            (
+                                budget_id,
+                                user_id,
+                                date_str,
+                                tokens,
+                                requests,
+                                datetime.now(timezone.utc),
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -312,7 +321,14 @@ class DataStore(metaclass=SingletonMeta):
                             VALUES (%s, %s, %s, %s, %s, %s)
                             ON CONFLICT (id) DO NOTHING;
                             """,
-                            (admin_id, admin_data["username"], admin_data["email"], admin_data["password_hash"], admin_data["role"], now),
+                            (
+                                admin_id,
+                                admin_data["username"],
+                                admin_data["email"],
+                                admin_data["password_hash"],
+                                admin_data["role"],
+                                now,
+                            ),
                         )
                         cur.execute(
                             """
@@ -320,7 +336,14 @@ class DataStore(metaclass=SingletonMeta):
                             VALUES (%s, %s, %s, %s, %s, %s)
                             ON CONFLICT (id) DO NOTHING;
                             """,
-                            (demo_id, demo_data["username"], demo_data["email"], demo_data["password_hash"], demo_data["role"], now),
+                            (
+                                demo_id,
+                                demo_data["username"],
+                                demo_data["email"],
+                                demo_data["password_hash"],
+                                demo_data["role"],
+                                now,
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -343,7 +366,14 @@ class DataStore(metaclass=SingletonMeta):
                             VALUES (%s, %s, %s, %s, %s, %s)
                             ON CONFLICT DO NOTHING;
                             """,
-                            (user_id, f"auto_{hashed_suffix}", f"auto_{hashed_suffix}@tripmate.local", "dummy_hash", "user", now),
+                            (
+                                user_id,
+                                f"auto_{hashed_suffix}",
+                                f"auto_{hashed_suffix}@tripmate.local",
+                                "dummy_hash",
+                                "user",
+                                now,
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -384,7 +414,14 @@ class DataStore(metaclass=SingletonMeta):
                             INSERT INTO users (id, username, email, password_hash, role, created_at)
                             VALUES (%s, %s, %s, %s, %s, %s);
                             """,
-                            (user_id, user["username"], user["email"], password_hash, role, now),
+                            (
+                                user_id,
+                                user["username"],
+                                user["email"],
+                                password_hash,
+                                role,
+                                now,
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -430,8 +467,8 @@ class DataStore(metaclass=SingletonMeta):
                     with conn.cursor() as cur:
                         cur.execute(
                             """
-                            SELECT id, username, email, password_hash, role, created_at 
-                            FROM users 
+                            SELECT id, username, email, password_hash, role, created_at
+                            FROM users
                             WHERE LOWER(username) = %s OR LOWER(email) = %s;
                             """,
                             (ident, ident),
@@ -489,14 +526,19 @@ class DataStore(metaclass=SingletonMeta):
                     with conn.cursor() as cur:
                         cur.execute(
                             "DELETE FROM users WHERE id = %s OR LOWER(username) = %s OR LOWER(email) = %s;",
-                            (identifier, identifier.strip().lower(), identifier.strip().lower()),
+                            (
+                                identifier,
+                                identifier.strip().lower(),
+                                identifier.strip().lower(),
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
                 logger.warning(f"PostgreSQL delete_user failed: {exc}")
 
         to_del = [
-            uid for uid, u in self._users.items()
+            uid
+            for uid, u in self._users.items()
             if uid == identifier or u.get("username") == identifier.lower() or u.get("email") == identifier.lower()
         ]
         for uid in to_del:
@@ -508,7 +550,7 @@ class DataStore(metaclass=SingletonMeta):
         user = self.get_user_by_username_or_email(email)
         if not user:
             return None
-        
+
         token = f"rst_{secrets.token_hex(20)}"
         expires_at = int(time.time()) + 900  # 15 minutes
         pool = get_db_pool()
@@ -550,8 +592,14 @@ class DataStore(metaclass=SingletonMeta):
                         if not row or row["used"] or row["expires_at"] < time.time():
                             return False
                         user_id = row["user_id"]
-                        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s;", (new_password_hash, user_id))
-                        cur.execute("UPDATE password_reset_tokens SET used = true WHERE token = %s;", (token,))
+                        cur.execute(
+                            "UPDATE users SET password_hash = %s WHERE id = %s;",
+                            (new_password_hash, user_id),
+                        )
+                        cur.execute(
+                            "UPDATE password_reset_tokens SET used = true WHERE token = %s;",
+                            (token,),
+                        )
                     conn.commit()
                     if user_id in self._users:
                         self._users[user_id]["password_hash"] = new_password_hash
@@ -610,7 +658,10 @@ class DataStore(metaclass=SingletonMeta):
             try:
                 with pool.connection() as conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT user_id FROM thread_ownership WHERE thread_id = %s;", (thread_id,))
+                        cur.execute(
+                            "SELECT user_id FROM thread_ownership WHERE thread_id = %s;",
+                            (thread_id,),
+                        )
                         row = cur.fetchone()
                         if row:
                             self._thread_owners[thread_id] = row["user_id"]
@@ -658,13 +709,22 @@ class DataStore(metaclass=SingletonMeta):
                         cur.execute(
                             """
                             INSERT INTO watchlists (
-                                id, user_id, title, target_type, target_value, 
+                                id, user_id, title, target_type, target_value,
                                 threshold_price, current_price_estimate, currency, notes, active, created_at
                             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                             """,
                             (
-                                item_id, user_id, title, target_type, target_value,
-                                threshold_price, base_estimate, "USD", notes, True, now,
+                                item_id,
+                                user_id,
+                                title,
+                                target_type,
+                                target_value,
+                                threshold_price,
+                                base_estimate,
+                                "USD",
+                                notes,
+                                True,
+                                now,
                             ),
                         )
                     conn.commit()
@@ -682,8 +742,8 @@ class DataStore(metaclass=SingletonMeta):
                 with pool.connection() as conn:
                     with conn.cursor() as cur:
                         query = """
-                            SELECT id, user_id, title, target_type, target_value, 
-                                   threshold_price, current_price_estimate, currency, notes, active, created_at 
+                            SELECT id, user_id, title, target_type, target_value,
+                                   threshold_price, current_price_estimate, currency, notes, active, created_at
                             FROM watchlists WHERE id = %s
                         """
                         params = [item_id]
@@ -724,8 +784,8 @@ class DataStore(metaclass=SingletonMeta):
                 with pool.connection() as conn:
                     with conn.cursor() as cur:
                         query = """
-                            SELECT id, user_id, title, target_type, target_value, 
-                                   threshold_price, current_price_estimate, currency, notes, active, created_at 
+                            SELECT id, user_id, title, target_type, target_value,
+                                   threshold_price, current_price_estimate, currency, notes, active, created_at
                             FROM watchlists
                         """
                         params = []
@@ -822,7 +882,17 @@ class DataStore(metaclass=SingletonMeta):
                             INSERT INTO alerts (id, user_id, watchlist_id, title, message, alert_type, severity, is_read, created_at)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
                             """,
-                            (alert_id, user_id, watchlist_id, title, message, alert_type, severity, False, now),
+                            (
+                                alert_id,
+                                user_id,
+                                watchlist_id,
+                                title,
+                                message,
+                                alert_type,
+                                severity,
+                                False,
+                                now,
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -975,7 +1045,16 @@ class DataStore(metaclass=SingletonMeta):
                             INSERT INTO assets (id, user_id, name, asset_type, trip_id, content_uri, metadata, created_at)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
                             """,
-                            (asset_id, user_id, name, asset_type, trip_id, uri, json.dumps(meta), now),
+                            (
+                                asset_id,
+                                user_id,
+                                name,
+                                asset_type,
+                                trip_id,
+                                uri,
+                                json.dumps(meta),
+                                now,
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -1054,16 +1133,18 @@ class DataStore(metaclass=SingletonMeta):
                                     meta = json.loads(meta)
                                 except Exception:
                                     meta = {}
-                            result.append({
-                                "id": r["id"],
-                                "user_id": r["user_id"],
-                                "name": r["name"] or "",
-                                "asset_type": r["asset_type"],
-                                "trip_id": r.get("trip_id"),
-                                "content_uri": r.get("content_uri") or "",
-                                "metadata": meta or {},
-                                "created_at": _format_datetime(r["created_at"]),
-                            })
+                            result.append(
+                                {
+                                    "id": r["id"],
+                                    "user_id": r["user_id"],
+                                    "name": r["name"] or "",
+                                    "asset_type": r["asset_type"],
+                                    "trip_id": r.get("trip_id"),
+                                    "content_uri": r.get("content_uri") or "",
+                                    "metadata": meta or {},
+                                    "created_at": _format_datetime(r["created_at"]),
+                                }
+                            )
                         return result
             except Exception as exc:
                 logger.warning(f"PostgreSQL list_assets failed: {exc}")

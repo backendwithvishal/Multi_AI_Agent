@@ -11,13 +11,14 @@ Determines:
 
 import json
 import logging
-from typing import Any, Dict, List
-from langchain_core.messages import SystemMessage, HumanMessage
+from typing import Any
 
-from tripmate.schemas.agents import TaskSpec, PlanDAG
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from tripmate.agents.registry import agent_registry
 from tripmate.config.settings import settings
 from tripmate.integrations.llm_resilience import invoke_llm_with_resilience
+from tripmate.schemas.agents import PlanDAG, TaskSpec
 
 logger = logging.getLogger("tripmate.planner")
 
@@ -32,8 +33,7 @@ class DynamicPlanner:
 
         registered_agents = agent_registry.list_agents()
         agent_descriptions = "\n".join(
-            f"- {a.name}: {a.description} (capabilities: {', '.join(a.capabilities)})"
-            for a in registered_agents
+            f"- {a.name}: {a.description} (capabilities: {', '.join(a.capabilities)})" for a in registered_agents
         ) or (
             "- flight_agent: flight status, airlines, options\n"
             "- hotel_agent: hotel accommodations\n"
@@ -90,7 +90,9 @@ User Request: {user_query}
             response = await invoke_llm_with_resilience(
                 llm,
                 [
-                    SystemMessage(content="You create structured multi-agent task execution plans. Return strict JSON only."),
+                    SystemMessage(
+                        content="You create structured multi-agent task execution plans. Return strict JSON only."
+                    ),
                     HumanMessage(content=prompt),
                 ],
                 timeout=settings.LLM_TIMEOUT_SECONDS,
@@ -104,7 +106,7 @@ User Request: {user_query}
             start = cleaned.find("{")
             end = cleaned.rfind("}")
             if start != -1 and end != -1:
-                data = json.loads(cleaned[start:end+1])
+                data = json.loads(cleaned[start : end + 1])
                 tasks = [TaskSpec(**t) for t in data.get("tasks", [])]
                 if tasks:
                     return PlanDAG(
@@ -120,16 +122,56 @@ User Request: {user_query}
     def _default_plan(self, query: str, reasoning: str) -> PlanDAG:
         """Returns standard default DAG for travel planning requests."""
         tasks = [
-            TaskSpec(task_id="flight_search", agent="flight_agent", depends_on=[], priority="high", retry_limit=2),
-            TaskSpec(task_id="hotel_search", agent="hotel_agent", depends_on=[], priority="high", retry_limit=2),
-            TaskSpec(task_id="weather_search", agent="weather_agent", depends_on=[], priority="medium", retry_limit=2),
-            TaskSpec(task_id="budget_analysis", agent="budget_agent", depends_on=["flight_search", "hotel_search"], priority="medium", retry_limit=2),
-            TaskSpec(task_id="itinerary_synthesis", agent="itinerary_agent", depends_on=["flight_search", "hotel_search", "weather_search", "budget_analysis"], priority="high", retry_limit=1),
+            TaskSpec(
+                task_id="flight_search",
+                agent="flight_agent",
+                depends_on=[],
+                priority="high",
+                retry_limit=2,
+            ),
+            TaskSpec(
+                task_id="hotel_search",
+                agent="hotel_agent",
+                depends_on=[],
+                priority="high",
+                retry_limit=2,
+            ),
+            TaskSpec(
+                task_id="weather_search",
+                agent="weather_agent",
+                depends_on=[],
+                priority="medium",
+                retry_limit=2,
+            ),
+            TaskSpec(
+                task_id="budget_analysis",
+                agent="budget_agent",
+                depends_on=["flight_search", "hotel_search"],
+                priority="medium",
+                retry_limit=2,
+            ),
+            TaskSpec(
+                task_id="itinerary_synthesis",
+                agent="itinerary_agent",
+                depends_on=[
+                    "flight_search",
+                    "hotel_search",
+                    "weather_search",
+                    "budget_analysis",
+                ],
+                priority="high",
+                retry_limit=1,
+            ),
         ]
         return PlanDAG(
             tasks=tasks,
             reasoning=reasoning,
-            trip_constraints={"destination": "", "origin": "", "duration": "", "budget": ""},
+            trip_constraints={
+                "destination": "",
+                "origin": "",
+                "duration": "",
+                "budget": "",
+            },
         )
 
 

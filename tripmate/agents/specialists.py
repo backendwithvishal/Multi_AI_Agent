@@ -14,36 +14,35 @@ All agents produce `StructuredAgentOutput` objects with evidence metadata and co
 
 import time
 from typing import Any, Dict, Optional
-from langchain_core.messages import SystemMessage, HumanMessage
 
-from tripmate.schemas.agents import (
-    StructuredAgentOutput,
-    EvidenceItem,
-    EvidenceType,
-    VerificationStatus,
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from tripmate.adapters import WeatherServiceAdapter
+from tripmate.agents.guardrail import (
+    strip_delimiter_tags,
+    wrap_untrusted_tool_data,
+    wrap_untrusted_user_input,
 )
-from tripmate.agents.registry import BaseAgent, AgentMetadata, agent_registry
-from tripmate.integrations.mcp import (
-    safe_aviation_call,
-    safe_tavily_search,
-    safe_weather_search,
-    safe_extract_destination,
-)
-from tripmate.cache.redis_cache import hybrid_cache
-from tripmate.adapters import WeatherServiceAdapter, FlightServiceAdapter, TavilySearchAdapter
-
-
+from tripmate.agents.registry import AgentMetadata, BaseAgent, agent_registry
 from tripmate.config.settings import settings
 from tripmate.integrations.llm_resilience import invoke_llm_with_resilience
-from tripmate.agents.guardrail import (
-    wrap_untrusted_user_input,
-    wrap_untrusted_tool_data,
-    strip_delimiter_tags,
+from tripmate.integrations.mcp import (
+    safe_aviation_call,
+    safe_extract_destination,
+    safe_tavily_search,
+    safe_weather_search,
+)
+from tripmate.schemas.agents import (
+    EvidenceItem,
+    EvidenceType,
+    StructuredAgentOutput,
+    VerificationStatus,
 )
 
 # =========================================================
 # Flight Agent
 # =========================================================
+
 
 class FlightAgent(BaseAgent):
     def __init__(self):
@@ -62,7 +61,7 @@ class FlightAgent(BaseAgent):
         try:
             airports = await safe_aviation_call("list_airports")
             airlines = await safe_aviation_call("list_airlines")
-            
+
             untrusted_query = wrap_untrusted_user_input(query)
             untrusted_airports = wrap_untrusted_tool_data(airports, max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
             untrusted_airlines = wrap_untrusted_tool_data(airlines, max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
@@ -144,6 +143,7 @@ Provide flight advice: departure/arrival airport options, airlines, estimated ai
 # Hotel Agent
 # =========================================================
 
+
 class HotelAgent(BaseAgent):
     def __init__(self):
         super().__init__(
@@ -193,6 +193,7 @@ class HotelAgent(BaseAgent):
 # Weather Agent
 # =========================================================
 
+
 class WeatherAgent(BaseAgent):
     def __init__(self):
         super().__init__(
@@ -235,6 +236,7 @@ class WeatherAgent(BaseAgent):
 # =========================================================
 # Budget Agent
 # =========================================================
+
 
 class BudgetAgent(BaseAgent):
     def __init__(self):
@@ -340,13 +342,18 @@ Analyze budget feasibility, cost estimates, risk areas, and money-saving tips.
 # Itinerary Agent
 # =========================================================
 
+
 class ItineraryAgent(BaseAgent):
     def __init__(self):
         super().__init__(
             AgentMetadata(
                 name="itinerary_agent",
                 description="Synthesizes flights, hotels, weather, and budget data into a cohesive draft itinerary.",
-                capabilities=["itinerary_synthesis", "day_planning", "schedule_optimization"],
+                capabilities=[
+                    "itinerary_synthesis",
+                    "day_planning",
+                    "schedule_optimization",
+                ],
                 required_tools=[],
                 risk_level="medium",
             )
@@ -365,16 +372,24 @@ class ItineraryAgent(BaseAgent):
             )
 
         untrusted_query = wrap_untrusted_user_input(query)
-        untrusted_flights = wrap_untrusted_tool_data(context.get('flight_info', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
-        untrusted_hotels = wrap_untrusted_tool_data(context.get('hotel_info', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
-        untrusted_weather = wrap_untrusted_tool_data(context.get('weather_info', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
-        untrusted_budget = wrap_untrusted_tool_data(context.get('budget_info', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
+        untrusted_flights = wrap_untrusted_tool_data(
+            context.get("flight_info", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+        )
+        untrusted_hotels = wrap_untrusted_tool_data(
+            context.get("hotel_info", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+        )
+        untrusted_weather = wrap_untrusted_tool_data(
+            context.get("weather_info", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+        )
+        untrusted_budget = wrap_untrusted_tool_data(
+            context.get("budget_info", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+        )
 
         prompt = f"""
 User Query:
 {untrusted_query}
 
-Constraints: {context.get('constraints', {})}
+Constraints: {context.get("constraints", {})}
 
 Flights:
 {untrusted_flights}
@@ -449,6 +464,7 @@ agent_registry.register(itinerary_agent_obj)
 # Backward-Compatible Async Runner Functions
 # =========================================================
 
+
 async def run_flight_agent(llm: Any, user_query: str) -> str:
     output = await flight_agent_obj.run(llm, user_query)
     return str(output.result)
@@ -464,7 +480,14 @@ async def run_weather_agent(llm: Any, user_query: str) -> str:
     return str(output.result)
 
 
-async def run_budget_agent(llm: Any, user_query: str, constraints: dict, flight_info: str, hotel_info: str, weather_info: str) -> str:
+async def run_budget_agent(
+    llm: Any,
+    user_query: str,
+    constraints: dict,
+    flight_info: str,
+    hotel_info: str,
+    weather_info: str,
+) -> str:
     output = await budget_agent_obj.run(
         llm,
         user_query,
@@ -478,7 +501,15 @@ async def run_budget_agent(llm: Any, user_query: str, constraints: dict, flight_
     return str(output.result)
 
 
-async def run_itinerary_agent(llm: Any, user_query: str, constraints: dict, flight_info: str, hotel_info: str, weather_info: str, budget_info: str) -> str:
+async def run_itinerary_agent(
+    llm: Any,
+    user_query: str,
+    constraints: dict,
+    flight_info: str,
+    hotel_info: str,
+    weather_info: str,
+    budget_info: str,
+) -> str:
     output = await itinerary_agent_obj.run(
         llm,
         user_query,
@@ -504,10 +535,18 @@ async def run_final_agent(llm: Any, user_query: str, state_data: dict) -> str:
     review_note = "User approved the draft itinerary." if approved else f"Apply revision feedback: {sanitized_feedback}"
 
     untrusted_query = wrap_untrusted_user_input(user_query)
-    untrusted_flights = wrap_untrusted_tool_data(state_data.get('flight_results', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
-    untrusted_hotels = wrap_untrusted_tool_data(state_data.get('hotel_results', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
-    untrusted_weather = wrap_untrusted_tool_data(state_data.get('weather_results', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
-    untrusted_budget = wrap_untrusted_tool_data(state_data.get('budget_results', ''), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES)
+    untrusted_flights = wrap_untrusted_tool_data(
+        state_data.get("flight_results", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+    )
+    untrusted_hotels = wrap_untrusted_tool_data(
+        state_data.get("hotel_results", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+    )
+    untrusted_weather = wrap_untrusted_tool_data(
+        state_data.get("weather_results", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+    )
+    untrusted_budget = wrap_untrusted_tool_data(
+        state_data.get("budget_results", ""), max_bytes=settings.MAX_TOOL_OUTPUT_BYTES
+    )
 
     prompt = f"""
 Generate final polished travel response.
@@ -516,7 +555,7 @@ Review Note: {review_note}
 User Request:
 {untrusted_query}
 
-Constraints: {state_data.get('trip_constraints', {})}
+Constraints: {state_data.get("trip_constraints", {})}
 
 Flight Data:
 {untrusted_flights}
@@ -531,7 +570,7 @@ Budget Data:
 {untrusted_budget}
 
 Draft Itinerary:
-{state_data.get('itinerary', '')}
+{state_data.get("itinerary", "")}
 
 Format final output with clear sections:
 1. Trip Summary

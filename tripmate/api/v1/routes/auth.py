@@ -9,21 +9,22 @@ Endpoints:
 
 import asyncio
 from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+
+from tripmate.api.dependencies import get_current_user
+from tripmate.core.audit import AuditEventType, audit_logger
 from tripmate.schemas import (
     APIResponse,
-    UserRegisterRequest,
-    UserLoginRequest,
-    TokenResponse,
-    UserProfile,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     ResetPasswordRequest,
-    ErrorDetail,
+    TokenResponse,
+    UserLoginRequest,
+    UserProfile,
+    UserRegisterRequest,
 )
 from tripmate.services.auth_service import auth_service
-from tripmate.api.dependencies import get_current_user
-from tripmate.core.audit import audit_logger, AuditEventType
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Identity"])
 
@@ -141,7 +142,10 @@ async def get_me(request: Request, current_user: Dict[str, Any] = Depends(get_cu
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "USER_NOT_FOUND", "message": "User account could not be found."},
+            detail={
+                "code": "USER_NOT_FOUND",
+                "message": "User account could not be found.",
+            },
         )
     return APIResponse(
         success=True,

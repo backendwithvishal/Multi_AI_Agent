@@ -11,15 +11,20 @@ Built on pydantic-settings with strict validation:
 """
 
 import os
-from importlib.metadata import version as _pkg_version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
+
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-if os.getenv("APP_ENV") not in ("test", "testing") and os.getenv("ENV") not in ("test", "testing"):
+if os.getenv("APP_ENV") not in ("test", "testing") and os.getenv("ENV") not in (
+    "test",
+    "testing",
+):
     load_dotenv(BASE_DIR / ".env")
 
 
@@ -33,6 +38,7 @@ def _get_version() -> str:
         pass
     try:
         import tomllib  # Python 3.11+
+
         toml_path = BASE_DIR / "pyproject.toml"
         with open(toml_path, "rb") as fh:
             data = tomllib.load(fh)
@@ -44,6 +50,7 @@ def _get_version() -> str:
 # =========================================================
 # Legacy Parsing Helper Functions (Preserved for compatibility)
 # =========================================================
+
 
 def _parse_str(name: str, default: str = "") -> str:
     """Reads a string environment variable with whitespace stripping and fallback."""
@@ -119,6 +126,7 @@ def _parse_list(name: str, default: List[str]) -> List[str]:
 # Pydantic Typed Settings Class
 # =========================================================
 
+
 class Settings(BaseSettings):
     """Central configuration class loading environment settings with pydantic validation."""
 
@@ -138,7 +146,9 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: Optional[str] = None
     ADMIN_REGISTRATION_SECRET: Optional[str] = None
     AUTH_REQUIRED: bool = False
-    ALLOWED_ORIGINS: Union[List[str], str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"])
+    ALLOWED_ORIGINS: Union[List[str], str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
+    )
 
     # External API Keys for AI & MCP services
     GROQ_API_KEY: str = ""
@@ -230,13 +240,20 @@ class Settings(BaseSettings):
     METRICS_TOKEN: Optional[str] = None
     METRICS_ALLOWED_IPS: Union[List[str], str] = Field(default_factory=lambda: ["127.0.0.1", "::1", "testclient"])
 
-    @field_validator("ALLOWED_ORIGINS", "TRUSTED_PROXIES", "TOOL_ALLOWED_HOSTS", "METRICS_ALLOWED_IPS", mode="before")
+    @field_validator(
+        "ALLOWED_ORIGINS",
+        "TRUSTED_PROXIES",
+        "TOOL_ALLOWED_HOSTS",
+        "METRICS_ALLOWED_IPS",
+        mode="before",
+    )
     @classmethod
     def _parse_list_fields(cls, v):
         if isinstance(v, str):
             cleaned = v.strip()
             if cleaned.startswith("[") and cleaned.endswith("]"):
                 import json
+
                 try:
                     return json.loads(cleaned)
                 except Exception:
@@ -251,7 +268,11 @@ class Settings(BaseSettings):
         explicit_env = values.get("APP_ENV") or values.get("ENV")
         raw_env = (
             explicit_env
-            or ("test" if (os.getenv("APP_ENV") in ("test", "testing") or os.getenv("ENV") in ("test", "testing")) else None)
+            or (
+                "test"
+                if (os.getenv("APP_ENV") in ("test", "testing") or os.getenv("ENV") in ("test", "testing"))
+                else None
+            )
             or os.getenv("ENV")
             or os.getenv("APP_ENV")
             or self.ENV
@@ -315,7 +336,9 @@ class Settings(BaseSettings):
         if "RATE_LIMIT_WINDOW_SECONDS" in os.environ:
             self.RATE_LIMIT_WINDOW_SECONDS = _parse_int("RATE_LIMIT_WINDOW_SECONDS", self.RATE_LIMIT_WINDOW_SECONDS)
         if "EXTERNAL_API_TIMEOUT_SECONDS" in os.environ:
-            self.EXTERNAL_API_TIMEOUT_SECONDS = _parse_float("EXTERNAL_API_TIMEOUT_SECONDS", self.EXTERNAL_API_TIMEOUT_SECONDS)
+            self.EXTERNAL_API_TIMEOUT_SECONDS = _parse_float(
+                "EXTERNAL_API_TIMEOUT_SECONDS", self.EXTERNAL_API_TIMEOUT_SECONDS
+            )
         if "LLM_TIMEOUT_SECONDS" in os.environ:
             self.LLM_TIMEOUT_SECONDS = _parse_float("LLM_TIMEOUT_SECONDS", self.LLM_TIMEOUT_SECONDS)
         if "MCP_TIMEOUT_SECONDS" in os.environ:
@@ -343,17 +366,24 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         """Returns True if running in production mode."""
-        return self.APP_ENV in ("production", "prod") or self.ENV in ("production", "prod")
+        return self.APP_ENV in ("production", "prod") or self.ENV in (
+            "production",
+            "prod",
+        )
 
     @property
     def is_dev(self) -> bool:
         """Returns True if running in development mode."""
-        return self.APP_ENV in ("development", "dev") or self.ENV in ("development", "dev")
+        return self.APP_ENV in ("development", "dev") or self.ENV in (
+            "development",
+            "dev",
+        )
 
     @property
     def is_test(self) -> bool:
         """Returns True if running under pytest or test environment."""
         import sys
+
         return (
             self.APP_ENV in ("test", "testing")
             or self.ENV in ("test", "testing")
@@ -370,22 +400,25 @@ class Settings(BaseSettings):
             missing = []
             has_llm = bool(self.GROQ_API_KEY or self.OPENROUTER_API_KEY or self.HUGGINGFACE_API_KEY)
             if not has_llm:
-                missing.append("At least one LLM Provider Key (GROQ_API_KEY, OPENROUTER_API_KEY, or HUGGINGFACE_API_KEY)")
+                missing.append(
+                    "At least one LLM Provider Key (GROQ_API_KEY, OPENROUTER_API_KEY, or HUGGINGFACE_API_KEY)"
+                )
             if not self.API_KEY:
                 missing.append("API_KEY (used for authorization and token signing)")
             if missing:
-                raise ValueError(
-                    f"Production startup failed! Mandatory configuration missing: {', '.join(missing)}"
-                )
-            if self.JWT_SECRET_KEY and self.JWT_SECRET_KEY in ("dev_jwt_secret_key_change_in_prod", "secret", "change-me", ""):
+                raise ValueError(f"Production startup failed! Mandatory configuration missing: {', '.join(missing)}")
+            if self.JWT_SECRET_KEY and self.JWT_SECRET_KEY in (
+                "dev_jwt_secret_key_change_in_prod",
+                "secret",
+                "change-me",
+                "",
+            ):
                 raise ValueError(
                     "Production startup failed! JWT_SECRET_KEY must be changed from default development secret."
                 )
 
             if "*" in self.ALLOWED_ORIGINS and self.AUTH_REQUIRED and getattr(self, "CORS_ALLOW_CREDENTIALS", False):
-                raise ValueError(
-                    "Production startup failed! Wildcard origin '*' cannot be combined with credentials."
-                )
+                raise ValueError("Production startup failed! Wildcard origin '*' cannot be combined with credentials.")
 
 
 # Global singleton settings object
