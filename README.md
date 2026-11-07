@@ -286,8 +286,10 @@ Multi_AI_Agent/
 ├── requirements.txt            # Python dependencies
 ├── docs/                       # Architecture, Runbook, and Security documentation
 │   ├── ARCHITECTURE.md         # Component diagrams and data flows
-│   ├── RUNBOOK.md              # Operations, SLOs, and incident playbooks
-│   └── archive/                # Historical audit archives
+│   ├── DEPLOYMENT.md           # Docker, Compose, and production deployment guide
+│   ├── RENDER_DEPLOYMENT.md    # Render web service & PostgreSQL deployment guide
+│   └── RUNBOOK.md              # Operations, SLOs, and incident playbooks
+├── postman/                    # Postman collection & environment for API testing
 ├── tests/                      # Automated test suite (unit, integration, security)
 └── tripmate/                   # Application package
     ├── adapters/               # MCP tool response normalizers

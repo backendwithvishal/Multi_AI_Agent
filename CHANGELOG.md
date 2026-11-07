@@ -7,6 +7,14 @@ Versions are single-sourced in [pyproject.toml](pyproject.toml).
 
 ---
 
+## [Unreleased]
+
+### Removed
+- Removed outdated audit archive logs from `docs/archive/` (`AUDIT.md`, `CODEBASE_AUDIT.md`, `OPERATIONS.md`, `THREAT_MODEL.md`).
+- Removed synthetic latency simulation script `benchmark.py` and unused evaluation framework `evaluation/`.
+- Removed redundant shell wrapper `scripts/verify_pins.sh`.
+- Purged local temporary caches, coverage binaries, and scratch files.
+
 ## [3.0.0] — 2026-11-03
 
 ### Added
