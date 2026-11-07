@@ -5,11 +5,12 @@ Handles administrative telemetry aggregation, user list, circuit breaker manual 
 """
 
 from typing import Any, Dict, List
-from tripmate.database.store import store
-from tripmate.services.travel_service import RUN_STORE
+
 from tripmate.cache.redis_cache import hybrid_cache
-from tripmate.integrations.mcp import tavily_breaker, aviation_breaker, weather_breaker
 from tripmate.config.settings import settings
+from tripmate.database.store import store
+from tripmate.integrations.mcp import aviation_breaker, tavily_breaker, weather_breaker
+from tripmate.services.travel_service import RUN_STORE
 
 
 class AdminService:
@@ -55,8 +56,9 @@ class AdminService:
 
     def create_user_account(self, username: str, email: str, password: str, role: str = "user") -> Dict[str, Any]:
         """Allows administrators to provision new user or admin accounts."""
-        from tripmate.services.auth_service import auth_service
         from tripmate.schemas import UserRegisterRequest
+        from tripmate.services.auth_service import auth_service
+
         req = UserRegisterRequest(username=username, email=email, password=password, role=role)
         return auth_service.register_user(req, is_caller_admin=True)
 

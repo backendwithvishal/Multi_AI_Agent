@@ -7,13 +7,14 @@ It stores query inputs, plan DAGs, selected agents, specialist outputs, evidence
 
 import operator
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
+
 from langchain_core.messages import AnyMessage
 
 
 class TravelState(TypedDict, total=False):
     # Message log history for chat memory
     messages: Annotated[List[AnyMessage], operator.add]
-    
+
     # User input details & correlation keys
     user_query: str
     user_id: Optional[str]
@@ -26,7 +27,7 @@ class TravelState(TypedDict, total=False):
     # Guardrail safety check outputs
     guardrail_allowed: bool
     guardrail_reason: str
-    
+
     # Planner & Supervisor routing decisions & DAG task graph
     plan_dag: Dict[str, Any]
     selected_agents: List[str]

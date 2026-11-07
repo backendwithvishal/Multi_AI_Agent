@@ -9,19 +9,17 @@ from typing import Any, Callable, Dict, Optional
 
 from tripmate.config.settings import settings
 from tripmate.core.context import get_request_id
-from tripmate.middleware.metrics import metrics_registry
 from tripmate.integrations.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerOpenException,
     circuit_breaker_registry,
 )
+from tripmate.middleware.metrics import metrics_registry
 
 logger = logging.getLogger("tripmate.llm_resilience")
 
 # Register Circuit Breakers for external LLM providers
-groq_breaker = circuit_breaker_registry.register(
-    CircuitBreaker("groq_llm", failure_threshold=3, cooldown_seconds=30.0)
-)
+groq_breaker = circuit_breaker_registry.register(CircuitBreaker("groq_llm", failure_threshold=3, cooldown_seconds=30.0))
 openrouter_breaker = circuit_breaker_registry.register(
     CircuitBreaker("openrouter_llm", failure_threshold=3, cooldown_seconds=30.0)
 )
@@ -100,11 +98,7 @@ async def invoke_llm_with_resilience(
 
         # Record LLM token metrics if available
         try:
-            model_name = (
-                getattr(llm, "model_name", None)
-                or getattr(llm, "model", None)
-                or provider_name
-            )
+            model_name = getattr(llm, "model_name", None) or getattr(llm, "model", None) or provider_name
             usage = None
             if hasattr(res, "usage_metadata") and res.usage_metadata:
                 usage = res.usage_metadata
@@ -125,4 +119,3 @@ async def invoke_llm_with_resilience(
         return res
 
     return await execute_with_backoff_and_jitter(_call, max_retries=max_retries)
-

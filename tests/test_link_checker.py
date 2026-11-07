@@ -29,13 +29,14 @@ class BrokenLink(NamedTuple):
 
 
 def _collect_markdown_files() -> List[Path]:
-    """Return every .md file in the repo (excluding .pytest_cache, __pycache__)."""
+    """Return every active .md file in the repo (excluding .pytest_cache, __pycache__, archive)."""
     return [
         p
         for p in ROOT.rglob("*.md")
         if ".pytest_cache" not in p.parts
         and "__pycache__" not in p.parts
         and ".git" not in p.parts
+        and "archive" not in p.parts
     ]
 
 

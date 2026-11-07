@@ -5,6 +5,7 @@ This module estimates token usage and LLM costs per agent, provider, and workflo
 Exposes telemetry helper functions for run metric aggregation.
 """
 
+import time
 from typing import Any, Dict
 
 # Standard token pricing estimates per 1,000 tokens (USD)
@@ -13,6 +14,37 @@ PRICING_CATALOG = {
     "llama-3.1-8b-instant": {"input": 0.00005, "output": 0.00008},
     "default": {"input": 0.00050, "output": 0.00050},
 }
+
+
+class UserTokenBudgetTracker:
+    """Tracks and enforces daily token limits per user."""
+
+    def __init__(self):
+        self._usage: Dict[str, Dict[str, Any]] = {}
+
+    def get_remaining(self, user_id: str, budget: int) -> int:
+        current_day = int(time.time() // 86400)
+        data = self._usage.get(user_id)
+        if not data or data.get("day") != current_day:
+            return budget
+        return max(0, budget - data.get("tokens", 0))
+
+    def consume(self, user_id: str, tokens: int, budget: int) -> int:
+        current_day = int(time.time() // 86400)
+        data = self._usage.get(user_id)
+        if not data or data.get("day") != current_day:
+            consumed = tokens
+            self._usage[user_id] = {"day": current_day, "tokens": consumed}
+        else:
+            consumed = data.get("tokens", 0) + tokens
+            data["tokens"] = consumed
+        return max(0, budget - consumed)
+
+    def reset(self):
+        self._usage.clear()
+
+
+token_budget_tracker = UserTokenBudgetTracker()
 
 
 def estimate_tokens(text: str) -> int:

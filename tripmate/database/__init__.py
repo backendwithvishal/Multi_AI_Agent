@@ -62,6 +62,7 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         finally:
             try:
                 from tripmate.middleware.metrics import metrics_registry
+
                 metrics_registry.record_checkpoint_db_latency(time.time() - t0)
             except Exception:
                 pass
@@ -89,6 +90,7 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         finally:
             try:
                 from tripmate.middleware.metrics import metrics_registry
+
                 metrics_registry.record_checkpoint_db_latency(time.time() - t0)
             except Exception:
                 pass
@@ -103,6 +105,7 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         finally:
             try:
                 from tripmate.middleware.metrics import metrics_registry
+
                 metrics_registry.record_checkpoint_db_latency(time.time() - t0)
             except Exception:
                 pass
@@ -134,6 +137,7 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         finally:
             try:
                 from tripmate.middleware.metrics import metrics_registry
+
                 metrics_registry.record_checkpoint_db_latency(time.time() - t0)
             except Exception:
                 pass
@@ -145,7 +149,7 @@ class PostgresCheckpointer(BaseCheckpointSaver):
 def get_formatted_db_url() -> Optional[str]:
     """
     Returns the database connection URL formatted with appropriate SSL parameters.
-    
+
     - If `sslmode` is explicitly set in `DATABASE_URL`, respects the provided parameter.
     - For local development and Docker container networks (e.g. `localhost`, `127.0.0.1`, `postgres_db`),
       does not force `sslmode=require` since standard local PostgreSQL instances do not enable SSL by default.
@@ -234,6 +238,7 @@ def close_db_pools():
 
 
 import atexit
+
 atexit.register(close_db_pools)
 
 
@@ -322,7 +327,7 @@ def setup_checkpoint_tables(db_url: Optional[str] = None) -> bool:
 
 def initialize_checkpointer():
     """Initializes workflow checkpointer with strict production fail-fast rules.
-    
+
     Rules:
     - In test mode, fallback to MemorySaver for fast unit testing unless RUN_LIVE_DB_TESTS is set.
     - In production or any environment where ENV != 'dev', PostgreSQL is strictly required.
@@ -336,7 +341,9 @@ def initialize_checkpointer():
         return MemorySaver() if MemorySaver else None
 
     db_url = get_formatted_db_url()
-    is_dev = (settings.ENV in ("dev", "development") or settings.APP_ENV in ("dev", "development") or settings.is_test) and not settings.is_production
+    is_dev = (
+        settings.ENV in ("dev", "development") or settings.APP_ENV in ("dev", "development") or settings.is_test
+    ) and not settings.is_production
 
     if db_url and psycopg and PostgresSaver and ConnectionPool:
         try:

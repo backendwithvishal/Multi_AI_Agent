@@ -15,6 +15,7 @@ This module defines Pydantic v2 schemas for all 10 platform API domains:
 """
 
 from typing import Any, Dict, Generic, List, Optional, TypeVar
+
 from pydantic import BaseModel, Field, field_validator
 
 T = TypeVar("T")
@@ -23,6 +24,7 @@ T = TypeVar("T")
 # =========================================================
 # Generic API Response & Error Containers
 # =========================================================
+
 
 class ErrorDetail(BaseModel):
     code: str = Field(description="Machine-readable error classification code.")
@@ -53,6 +55,7 @@ class APIRootResponse(BaseModel):
 # 1. Health & 2. System Status Schemas
 # =========================================================
 
+
 class SystemStatusResponse(BaseModel):
     service: str
     version: str
@@ -69,8 +72,14 @@ class SystemStatusResponse(BaseModel):
 # 3. AI Analysis Schemas
 # =========================================================
 
+
 class AIAnalysisRequest(BaseModel):
-    query: str = Field(..., min_length=3, max_length=2000, description="Travel plan or prompt to analyze.")
+    query: str = Field(
+        ...,
+        min_length=3,
+        max_length=2000,
+        description="Travel plan or prompt to analyze.",
+    )
     itinerary: Optional[str] = Field(default="", description="Optional candidate itinerary text to evaluate.")
     budget: Optional[float] = Field(default=None, ge=0, description="Optional target budget limit.")
     destination: Optional[str] = Field(default="", description="Optional target destination.")
@@ -98,6 +107,7 @@ class AIAnalysisResponse(BaseModel):
 # =========================================================
 # 4. Authentication Schemas
 # =========================================================
+
 
 class UserRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
@@ -143,7 +153,10 @@ class ForgotPasswordRequest(BaseModel):
 
 class ForgotPasswordResponse(BaseModel):
     message: str
-    reset_token: Optional[str] = Field(default=None, description="Reset token provided for API testing/development environment.")
+    reset_token: Optional[str] = Field(
+        default=None,
+        description="Reset token provided for API testing/development environment.",
+    )
 
 
 class ResetPasswordRequest(BaseModel):
@@ -155,10 +168,25 @@ class ResetPasswordRequest(BaseModel):
 # 5. Watchlists Schemas
 # =========================================================
 
+
 class WatchlistCreateRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=100, description="Watchlist label, e.g. Summer in Tokyo")
-    target_type: str = Field(..., pattern="^(destination|flight|hotel)$", description="Type of watched travel item")
-    target_value: str = Field(..., min_length=1, max_length=200, description="Destination city, flight route (e.g. JFK-CDG), or hotel name")
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Watchlist label, e.g. Summer in Tokyo",
+    )
+    target_type: str = Field(
+        ...,
+        pattern="^(destination|flight|hotel)$",
+        description="Type of watched travel item",
+    )
+    target_value: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Destination city, flight route (e.g. JFK-CDG), or hotel name",
+    )
     threshold_price: Optional[float] = Field(default=None, ge=0.0, description="Target price alert threshold in USD")
     notes: str = Field(default="", max_length=500)
 
@@ -180,10 +208,14 @@ class WatchlistItem(BaseModel):
 # 6. Alerts Schemas
 # =========================================================
 
+
 class AlertCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
     message: str = Field(..., min_length=1, max_length=500)
-    alert_type: str = Field(default="price_drop", pattern="^(price_drop|weather_warning|flight_status|system)$")
+    alert_type: str = Field(
+        default="price_drop",
+        pattern="^(price_drop|weather_warning|flight_status|system)$",
+    )
     severity: str = Field(default="info", pattern="^(info|warning|critical)$")
     watchlist_id: Optional[str] = None
 
@@ -204,9 +236,18 @@ class AlertItem(BaseModel):
 # 7. Assets Schemas
 # =========================================================
 
+
 class AssetCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100, description="Asset display name, e.g. Flight Ticket to Paris")
-    asset_type: str = Field(..., pattern="^(ticket|hotel_voucher|passport_copy|packing_list|itinerary_pdf|receipt)$")
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Asset display name, e.g. Flight Ticket to Paris",
+    )
+    asset_type: str = Field(
+        ...,
+        pattern="^(ticket|hotel_voucher|passport_copy|packing_list|itinerary_pdf|receipt)$",
+    )
     trip_id: Optional[str] = Field(default=None, description="Associated conversation thread or trip ID")
     content_uri: Optional[str] = Field(default="", description="Resource URI, URL, or data locator")
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -226,6 +267,7 @@ class AssetItem(BaseModel):
 # =========================================================
 # 8. Financial Engine Schemas (Deterministic)
 # =========================================================
+
 
 class FinancialCalculationRequest(BaseModel):
     flight_estimate: float = Field(default=0.0, ge=0.0)
@@ -285,6 +327,7 @@ class BudgetAnalysisResponse(BaseModel):
 # 9. Admin Management Schemas
 # =========================================================
 
+
 class AdminStatsResponse(BaseModel):
     total_users: int
     total_runs: int
@@ -305,6 +348,7 @@ class AdminResetBreakerRequest(BaseModel):
 # =========================================================
 
 import re
+
 from tripmate.config.settings import settings
 
 CONTROL_CHARS_REGEX = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -356,9 +400,7 @@ class TravelRequest(BaseModel):
         if not cleaned:
             return None
         if not re.match(settings.THREAD_ID_REGEX, cleaned):
-            raise ValueError(
-                f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'."
-            )
+            raise ValueError(f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'.")
         return cleaned
 
 
@@ -391,9 +433,7 @@ class ApprovalRequest(BaseModel):
     def validate_thread_id(cls, v: str) -> str:
         cleaned = strip_control_chars(v).strip()
         if not re.match(settings.THREAD_ID_REGEX, cleaned):
-            raise ValueError(
-                f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'."
-            )
+            raise ValueError(f"Invalid thread_id format. Must match regex '{settings.THREAD_ID_REGEX}'.")
         return cleaned
 
     @field_validator("feedback")

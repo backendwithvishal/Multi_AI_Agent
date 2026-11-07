@@ -7,10 +7,8 @@ Implementations for:
 3. System Health Audit Diagnostics
 """
 
-import asyncio
 import logging
 from typing import Any, Dict
-from decimal import Decimal
 
 from tripmate.database.store import datastore
 from tripmate.services.travel_service import travel_service
@@ -95,8 +93,8 @@ async def task_system_health_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Performs platform health diagnostics across database, cache, and services.
     """
-    from tripmate.database import check_db_health
     from tripmate.cache.redis_cache import hybrid_cache
+    from tripmate.database import check_db_health
 
     db_health = check_db_health()
     cache_health = await hybrid_cache.ping()

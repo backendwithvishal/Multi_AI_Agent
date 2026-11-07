@@ -343,6 +343,8 @@ async def test_cache_size_limit():
 
 def test_postgres_required_in_prod(monkeypatch):
     """Verifies that non-dev / production environments fail startup if PostgresSaver fails."""
+    monkeypatch.setenv("RUN_LIVE_DB_TESTS", "1")
+    monkeypatch.setattr(settings, "APP_ENV", "production")
     monkeypatch.setattr(settings, "ENV", "production")
     monkeypatch.setattr(settings, "DATABASE_URL", "postgresql://invalid_user:invalid_pass@localhost:9999/invalid_db")
 

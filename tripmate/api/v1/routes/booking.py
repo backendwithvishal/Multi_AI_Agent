@@ -11,6 +11,7 @@ Endpoints:
 
 import uuid
 from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
@@ -35,15 +36,30 @@ class ReservationRequest(BaseModel):
     special_requests: str = Field(default="", description="Optional special dietary/seating/room requests")
 
 
-@router.get("/flights/search", response_model=APIResponse[Dict[str, Any]], summary="Search live GDS flights")
+@router.get(
+    "/flights/search",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Search live GDS flights",
+)
 async def search_flights(
     request: Request,
-    origin: str = Query(..., min_length=3, max_length=4, description="Origin IATA airport code (e.g. JFK)"),
-    destination: str = Query(..., min_length=3, max_length=4, description="Destination IATA airport code (e.g. LHR)"),
+    origin: str = Query(
+        ...,
+        min_length=3,
+        max_length=4,
+        description="Origin IATA airport code (e.g. JFK)",
+    ),
+    destination: str = Query(
+        ...,
+        min_length=3,
+        max_length=4,
+        description="Destination IATA airport code (e.g. LHR)",
+    ),
     departure_date: str = Query(..., description="Departure date (YYYY-MM-DD)"),
     return_date: Optional[str] = Query(None, description="Optional return date (YYYY-MM-DD)"),
     adults: int = Query(1, ge=1, le=9, description="Number of adult passengers"),
     cabin_class: str = Query("ECONOMY", description="Cabin class (ECONOMY, PREMIUM, BUSINESS)"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
     try:
@@ -64,18 +80,31 @@ async def search_flights(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": "GDS_SEARCH_ERROR", "message": f"Flight search failed: {exc}"},
+            detail={
+                "code": "GDS_SEARCH_ERROR",
+                "message": f"Flight search failed: {exc}",
+            },
         )
 
 
-@router.get("/hotels/search", response_model=APIResponse[Dict[str, Any]], summary="Search live GDS hotels")
+@router.get(
+    "/hotels/search",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Search live GDS hotels",
+)
 async def search_hotels(
     request: Request,
-    city_code: str = Query(..., min_length=3, max_length=4, description="City / Airport IATA code (e.g. PAR, NYC)"),
+    city_code: str = Query(
+        ...,
+        min_length=3,
+        max_length=4,
+        description="City / Airport IATA code (e.g. PAR, NYC)",
+    ),
     check_in_date: str = Query(..., description="Check-in date (YYYY-MM-DD)"),
     check_out_date: str = Query(..., description="Check-out date (YYYY-MM-DD)"),
     guests: int = Query(2, ge=1, le=8, description="Number of guests"),
     rooms: int = Query(1, ge=1, le=4, description="Number of rooms"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
     try:
@@ -95,22 +124,31 @@ async def search_hotels(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": "GDS_SEARCH_ERROR", "message": f"Hotel search failed: {exc}"},
+            detail={
+                "code": "GDS_SEARCH_ERROR",
+                "message": f"Hotel search failed: {exc}",
+            },
         )
 
 
-@router.post("/price-lock", response_model=APIResponse[Dict[str, Any]], summary="Lock fare price for 15 minutes")
+@router.post(
+    "/price-lock",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Lock fare price for 15 minutes",
+)
 async def lock_price(
     req: PriceLockRequest,
     request: Request,
     current_user: Optional[Dict[str, Any]] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
+    user_id = current_user.get("id") or current_user.get("uid") if current_user else None
     lock_record = await gds_client.lock_price(
         offer_id=req.offer_id,
         offer_type=req.offer_type,
         total_price=req.total_price,
         currency=req.currency,
+        user_id=user_id,
     )
     return APIResponse(
         success=True,
@@ -120,7 +158,11 @@ async def lock_price(
     )
 
 
-@router.post("/reserve", response_model=APIResponse[Dict[str, Any]], summary="Finalize booking reservation & generate PNR")
+@router.post(
+    "/reserve",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Finalize booking reservation & generate PNR",
+)
 async def create_reservation(
     req: ReservationRequest,
     request: Request,
@@ -149,7 +191,11 @@ async def create_reservation(
         )
 
 
-@router.get("/reservations/{booking_id}", response_model=APIResponse[Dict[str, Any]], summary="Get booking details")
+@router.get(
+    "/reservations/{booking_id}",
+    response_model=APIResponse[Dict[str, Any]],
+    summary="Get booking details",
+)
 async def get_reservation(
     booking_id: str,
     request: Request,
@@ -164,7 +210,10 @@ async def get_reservation(
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "BOOKING_NOT_FOUND", "message": f"Reservation '{booking_id}' not found."},
+            detail={
+                "code": "BOOKING_NOT_FOUND",
+                "message": f"Reservation '{booking_id}' not found.",
+            },
         )
     return APIResponse(
         success=True,

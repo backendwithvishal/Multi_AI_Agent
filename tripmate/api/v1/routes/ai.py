@@ -7,12 +7,15 @@ Endpoints:
 """
 
 from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from tripmate.schemas import APIResponse, AIPlanRequest, AIAgentInvokeRequest
+
+from tripmate.agents.guardrail import run_guardrail_check
 from tripmate.agents.planner import planner
 from tripmate.agents.registry import agent_registry
-from tripmate.services.model_router import model_router, ModelTier
 from tripmate.api.dependencies import get_current_user
+from tripmate.schemas import AIAgentInvokeRequest, AIPlanRequest, APIResponse
+from tripmate.services.model_router import ModelTier, model_router
 
 router = APIRouter(prefix="/ai", tags=["AI Orchestration & Agents"])
 
@@ -29,7 +32,17 @@ async def generate_plan(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", "req_ai_plan")
+    fast_llm = model_router.get_model(ModelTier.FAST)
     reasoning_llm = model_router.get_model(ModelTier.REASONING)
+    allowed, reason = await run_guardrail_check(fast_llm or reasoning_llm, req.query)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "GUARDRAIL_BLOCKED",
+                "message": f"Query blocked by guardrail: {reason}",
+            },
+        )
     plan_dag = await planner.create_plan(reasoning_llm, req.query)
     return APIResponse(
         success=True,
@@ -63,7 +76,17 @@ async def invoke_agent(
             },
         )
 
+    fast_llm = model_router.get_model(ModelTier.FAST)
     reasoning_llm = model_router.get_model(ModelTier.REASONING)
+    allowed, reason = await run_guardrail_check(fast_llm or reasoning_llm, req.query)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "GUARDRAIL_BLOCKED",
+                "message": f"Query blocked by guardrail: {reason}",
+            },
+        )
     output = await agent.run(reasoning_llm, req.query, context=req.context)
     return APIResponse(
         success=True,

@@ -1,11 +1,14 @@
 import uuid
 from typing import Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from tripmate.schemas import TravelRequest, APIResponse, ErrorDetail
-from tripmate.services.travel_service import travel_service
 from tripmate.api.dependencies import get_current_user
+from tripmate.config.settings import settings
+from tripmate.schemas import APIResponse, ErrorDetail, TravelRequest
+from tripmate.services.observability import estimate_tokens, token_budget_tracker
+from tripmate.services.travel_service import travel_service
 
 router = APIRouter(prefix="/travel", tags=["Travel Multi-Agent API"])
 
@@ -19,10 +22,47 @@ router = APIRouter(prefix="/travel", tags=["Travel Multi-Agent API"])
 async def create_travel_plan(
     request_data: TravelRequest,
     request: Request,
+    response: Response = None,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
-    effective_user_id = current_user.get("id")
+    effective_user_id = current_user.get("id") or "anonymous"
+
+    # Enforce daily token budget
+    remaining = token_budget_tracker.get_remaining(effective_user_id, settings.DAILY_TOKEN_BUDGET_PER_USER)
+    if remaining <= 0:
+        return JSONResponse(
+            status_code=429,
+            content=APIResponse(
+                success=False,
+                data=None,
+                error=ErrorDetail(
+                    code="DAILY_TOKEN_BUDGET_EXCEEDED",
+                    message="Daily token budget exceeded for this user account.",
+                ),
+                request_id=request_id,
+            ).model_dump(),
+            headers={"X-TokenBudget-Remaining": "0"},
+        )
+
+    # Set initial header on response if response object is present
+    if response is not None:
+        response.headers["X-TokenBudget-Remaining"] = str(remaining)
+
+    if request_data.thread_id:
+        import asyncio
+
+        from tripmate.database.store import store
+
+        existing_owner = await asyncio.to_thread(store.get_thread_owner, request_data.thread_id)
+        if existing_owner and existing_owner != effective_user_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "THREAD_NOT_FOUND",
+                    "message": f"Thread '{request_data.thread_id}' not found or access is not authorized.",
+                },
+            )
     server_thread_id = request_data.thread_id or f"thread_{uuid.uuid4().hex}"
 
     try:
@@ -31,6 +71,11 @@ async def create_travel_plan(
             thread_id=server_thread_id,
             user_id=effective_user_id,
         )
+        est_tokens = estimate_tokens(request_data.message) + estimate_tokens(str(result))
+        remaining = token_budget_tracker.consume(effective_user_id, est_tokens, settings.DAILY_TOKEN_BUDGET_PER_USER)
+        if response is not None:
+            response.headers["X-TokenBudget-Remaining"] = str(remaining)
+
         return APIResponse(
             success=True,
             data=result,
@@ -51,6 +96,7 @@ async def create_travel_plan(
                 ),
                 request_id=request_id,
             ).model_dump(),
+            headers={"X-TokenBudget-Remaining": str(remaining)},
         )
 
 
@@ -66,6 +112,20 @@ async def stream_travel_plan(
 ):
     request_id = getattr(request.state, "request_id", f"req_{uuid.uuid4().hex[:12]}")
     effective_user_id = current_user.get("id")
+    if request_data.thread_id:
+        import asyncio
+
+        from tripmate.database.store import store
+
+        existing_owner = await asyncio.to_thread(store.get_thread_owner, request_data.thread_id)
+        if existing_owner and existing_owner != effective_user_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "THREAD_NOT_FOUND",
+                    "message": f"Thread '{request_data.thread_id}' not found or access is not authorized.",
+                },
+            )
     server_thread_id = request_data.thread_id or f"thread_{uuid.uuid4().hex}"
 
     generator = travel_service.stream_travel_events(

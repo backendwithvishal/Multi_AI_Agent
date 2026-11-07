@@ -4,13 +4,14 @@ Weather Service Adapter Pattern
 Adapts raw OpenWeather MCP responses into standardized domain schemas and evidence metadata.
 """
 
-from typing import Any, Dict, Optional
 from pydantic import BaseModel
+
 from tripmate.schemas.agents import EvidenceItem, EvidenceType, VerificationStatus
 
 
 class NormalizedWeatherData(BaseModel):
     """Application-facing normalized weather representation."""
+
     city: str
     summary: str
     current_weather: str

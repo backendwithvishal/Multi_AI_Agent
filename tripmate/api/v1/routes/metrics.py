@@ -7,12 +7,12 @@ or Bearer token / Admin credential verification.
 """
 
 import ipaddress
-from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from tripmate.config.settings import settings
+from tripmate.core.audit import AuditEventType, audit_logger
 from tripmate.middleware.metrics import metrics_registry
-from tripmate.core.audit import audit_logger, AuditEventType
 
 router = APIRouter(tags=["Monitoring & Metrics"])
 
@@ -20,14 +20,15 @@ router = APIRouter(tags=["Monitoring & Metrics"])
 def _extract_client_ip(request: Request) -> str:
     """Extracts client IP, prioritizing proxy headers when peer is internal/trusted."""
     peer_ip = request.client.host if request.client else "127.0.0.1"
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        parts = [p.strip() for p in forwarded.split(",") if p.strip()]
-        if parts:
-            return parts[0]
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip and real_ip.strip():
-        return real_ip.strip()
+    if _is_internal_ip(peer_ip):
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+            if parts:
+                return parts[0]
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip and real_ip.strip():
+            return real_ip.strip()
     return peer_ip
 
 
@@ -86,6 +87,7 @@ def _verify_metrics_auth(request: Request) -> bool:
         # Check admin user token
         try:
             from tripmate.api.dependencies import verify_token
+
             payload = verify_token(token)
             if payload and payload.get("role") in ("admin", "superadmin", "operator"):
                 return True

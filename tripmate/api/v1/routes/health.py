@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Request, Response, status
-from tripmate.config.settings import settings
-from tripmate.cache.redis_cache import hybrid_cache
-from tripmate.database import check_db_health
 
-from tripmate.tasks.queue import task_queue
-from tripmate.integrations.mcp import tavily_breaker, aviation_breaker, weather_breaker
+from tripmate.cache.redis_cache import hybrid_cache
+from tripmate.config.settings import settings
+from tripmate.database import check_db_health
 from tripmate.integrations.gds import gds_breaker
+from tripmate.integrations.mcp import aviation_breaker, tavily_breaker, weather_breaker
+from tripmate.tasks.queue import task_queue
 
 router = APIRouter(tags=["System Health & Diagnostics"])
 
@@ -91,4 +91,3 @@ async def readiness_probe(response: Response):
         "database": db_health,
         "cache_connected": cache_ping,
     }
-
