@@ -4,23 +4,25 @@ Regression Test Suite for Runtime Reliability, Real SSE Streaming, Checkpointing
 
 import asyncio
 import time
+
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app import app
-from tripmate.config.settings import settings
-from tripmate.database.store import store
-from tripmate.database import initialize_checkpointer
-from tripmate.services.travel_service import travel_service
-from tripmate.integrations.circuit_breaker import CircuitBreaker, CircuitBreakerOpenException, circuit_breaker_registry
-from tripmate.integrations.mcp import safe_tavily_search, safe_weather_search
 from tripmate.cache.redis_cache import hybrid_cache
+from tripmate.config.settings import settings
+from tripmate.database import initialize_checkpointer
+from tripmate.database.store import store
+from tripmate.integrations.circuit_breaker import circuit_breaker_registry
+from tripmate.integrations.mcp import safe_tavily_search
+from tripmate.services.travel_service import travel_service
 
 
 @pytest.fixture
 def auth_headers():
     user = store.create_user(
-        username=f"reliuser_{int(time.time()*1000)}",
-        email=f"reliuser_{int(time.time()*1000)}@tripmate.ai",
+        username=f"reliuser_{int(time.time() * 1000)}",
+        email=f"reliuser_{int(time.time() * 1000)}@tripmate.ai",
         password_hash="hashed_pw_xyz",
     )
     raw_key = store.create_api_key(user["id"], name="reli_test_key")
@@ -65,6 +67,7 @@ async def test_streaming_event_order(auth_headers):
 @pytest.mark.asyncio
 async def test_disconnect_cancellation(auth_headers):
     """Verifies that stream generator aborts immediately when client disconnects."""
+
     class MockDisconnectedRequest:
         async def is_disconnected(self):
             return True
@@ -110,7 +113,7 @@ async def test_checkpoint_persistence_across_app_restart():
     """Verifies that checkpointer retains state snapshots across checkpointer re-initialization."""
     from tripmate.graph.workflow import travel_workflow_graph
 
-    thread_id = f"thread_ckpt_{int(time.time()*1000)}"
+    thread_id = f"thread_ckpt_{int(time.time() * 1000)}"
     config = {"configurable": {"thread_id": thread_id}}
 
     # Write state to graph
@@ -202,58 +205,7 @@ async def test_approval_invalid_state(auth_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         from tripmate.graph.workflow import travel_workflow_graph
 
-        thread_id = f"thread_not_interrupted_{int(time.time()*1000)}"
-        token = auth_headers["Authorization"].replace("Bearer ", "")
-        user = store.get_user_by_api_key(token)
-        if user:
-            store.register_thread_owner(thread_id, user["id"])
-
-        config = {"configurable": {"thread_id": thread_id}}
-        # Update state without interrupt
-        await travel_workflow_graph.aupdate_state(config, {"user_query": "Test", "status": "IN_PROGRESS"})
-
-        resp = await client.post(
-            "/api/travel/approve",
-            headers=auth_headers,
-            json={"thread_id": thread_id, "approved": True, "feedback": ""},
-        )
-        assert resp.status_code == 400
-        assert resp.json()["error"]["code"] == "INVALID_WORKFLOW_STATE"
-
-
-@pytest.mark.asyncio
-async def test_rejection_idempotency(auth_headers):
-    """Verifies that rejecting an itinerary twice returns identical cached response."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        plan_resp = await client.post(
-            "/api/travel",
-            headers=auth_headers,
-            json={"message": "Trip to Amsterdam"},
-        )
-        assert plan_resp.status_code == 200
-        thread_id = plan_resp.json()["thread_id"]
-
-        reject_payload = {"thread_id": thread_id, "approved": False, "feedback": "Choose 4-star hotels only"}
-        resp1 = await client.post("/api/travel/approve", headers=auth_headers, json=reject_payload)
-        assert resp1.status_code == 200
-        res1 = resp1.json()
-        assert res1["success"] is True
-
-        # Second call returns identical response
-        resp2 = await client.post("/api/travel/approve", headers=auth_headers, json=reject_payload)
-        assert resp2.status_code == 200
-        res2 = resp2.json()
-        assert res2["success"] is True
-        assert res2["answer"] == res1["answer"]
-
-
-@pytest.mark.asyncio
-async def test_approval_invalid_state(auth_headers):
-    """Verifies that attempting to resume a non-interrupted thread returns 400 INVALID_WORKFLOW_STATE."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        from tripmate.graph.workflow import travel_workflow_graph
-
-        thread_id = f"thread_not_interrupted_{int(time.time()*1000)}"
+        thread_id = f"thread_not_interrupted_{int(time.time() * 1000)}"
         token = auth_headers["Authorization"].replace("Bearer ", "")
         user = store.get_user_by_api_key(token)
         if user:
@@ -301,7 +253,7 @@ async def test_approval_ttl_expiry(auth_headers):
 @pytest.mark.asyncio
 async def test_cache_user_isolation():
     """Verifies that MCP cache strictly namespaces by user and never leaks across users."""
-    key = f"iso_test_{int(time.time()*1000)}"
+    key = f"iso_test_{int(time.time() * 1000)}"
     val_u1 = {"secret": "user1_itinerary_data"}
     val_u2 = {"secret": "user2_itinerary_data"}
 
@@ -329,7 +281,7 @@ async def test_cache_user_isolation():
 @pytest.mark.asyncio
 async def test_cache_size_limit():
     """Verifies that payloads exceeding MCP_CACHE_MAX_BYTES (64KB) are rejected."""
-    key = f"size_test_{int(time.time()*1000)}"
+    key = f"size_test_{int(time.time() * 1000)}"
     oversized_data = "X" * (settings.MCP_CACHE_MAX_BYTES + 1024)
 
     # Attempt to cache oversized payload
@@ -360,15 +312,15 @@ async def test_llm_circuit_breaker_returns_degraded_mode():
     from tripmate.integrations.llm_resilience import groq_breaker, invoke_llm_with_resilience
 
     # Force-open the groq circuit breaker
-    original_state = groq_breaker.state
     groq_breaker.state = groq_breaker.state.OPEN
     groq_breaker.failure_count = 5
     groq_breaker.last_failure_time = time.time()
     groq_breaker.last_state_change = time.time()
 
     try:
+        from langchain_core.messages import HumanMessage
+
         from tripmate.integrations.circuit_breaker import CircuitBreakerOpenException
-        from langchain_core.messages import HumanMessage, SystemMessage
 
         class MockLLM:
             async def ainvoke(self, messages):
@@ -378,9 +330,7 @@ async def test_llm_circuit_breaker_returns_degraded_mode():
 
         # When circuit is open, should raise CircuitBreakerOpenException
         with pytest.raises(CircuitBreakerOpenException):
-            await invoke_llm_with_resilience(
-                mock_llm, [HumanMessage(content="test")], provider_name="groq"
-            )
+            await invoke_llm_with_resilience(mock_llm, [HumanMessage(content="test")], provider_name="groq")
     finally:
         groq_breaker.reset()
 
@@ -402,7 +352,11 @@ async def test_mcp_server_crash_triggers_backoff():
     # Getting tool during cooldown should raise with backoff message
     with pytest.raises(RuntimeError) as exc_info:
         await manager.get_tool("weather", "get_current_weather")
-    assert "backoff" in str(exc_info.value).lower() or "cooldown" in str(exc_info.value).lower() or "weather" in str(exc_info.value).lower()
+    assert (
+        "backoff" in str(exc_info.value).lower()
+        or "cooldown" in str(exc_info.value).lower()
+        or "weather" in str(exc_info.value).lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -445,5 +399,3 @@ async def test_dev_env_allows_memory_saver(monkeypatch):
     saver = initialize_checkpointer()
     # In dev with no DATABASE_URL, should return MemorySaver (not raise)
     assert saver is not None
-
-

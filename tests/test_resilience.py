@@ -5,10 +5,12 @@ Tests circuit breaker state transitions (CLOSED -> OPEN -> HALF_OPEN -> CLOSED) 
 """
 
 import asyncio
+
 # pyrefly: ignore [missing-import]
 import pytest
-from tripmate.integrations.circuit_breaker import CircuitBreaker, CircuitBreakerOpenException, CircuitState
+
 from tripmate.cache.ttl_cache import BoundedAsyncTTLCache
+from tripmate.integrations.circuit_breaker import CircuitBreaker, CircuitBreakerOpenException, CircuitState
 
 
 @pytest.mark.asyncio

@@ -15,26 +15,26 @@ import io
 import json
 import logging
 import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from httpx import AsyncClient, ASGITransport
+
+import pytest
+from httpx import ASGITransport, AsyncClient
 
 from app import app
 from tripmate.config.settings import settings
-from tripmate.core.context import current_request_id, set_request_context, get_request_id
+from tripmate.core.audit import AuditEventType, audit_logger
+from tripmate.core.context import get_request_id, set_request_context
 from tripmate.core.logging import (
-    redact_sensitive_data,
     RedactingJsonFormatter,
-    get_structured_logger,
+    redact_sensitive_data,
 )
-from tripmate.core.audit import audit_logger, AuditEventType
-from tripmate.core.tracing import get_tracer, is_otel_enabled, init_telemetry
+from tripmate.core.tracing import is_otel_enabled
 from tripmate.middleware.metrics import metrics_registry
-
 
 # =========================================================================
 # 1. Redaction Tests
 # =========================================================================
+
 
 def test_redaction_removes_keys_tokens_auth_and_pii():
     """Asserts that fake API keys, tokens, Authorization headers, and PII are redacted."""
@@ -94,14 +94,13 @@ def test_redacting_json_formatter_in_logger():
 # 2. Structured JSON Log & Request ID Propagation Tests
 # =========================================================================
 
+
 @pytest.mark.asyncio
 async def test_request_id_in_logs_and_outgoing_calls():
     """Verifies request_id appears in logs and propagates to LLM and MCP contexts."""
     test_req_id = "req_custom_obs_98765"
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health", headers={"X-Request-ID": test_req_id})
         assert response.status_code == 200
         assert response.headers["X-Request-ID"] == test_req_id
@@ -112,6 +111,7 @@ async def test_request_id_in_logs_and_outgoing_calls():
 
     # Reset circuit breakers to ensure clean state
     from tripmate.integrations.circuit_breaker import circuit_breaker_registry
+
     circuit_breaker_registry.reset_all()
 
     # Test propagation into outgoing LLM call wrapper
@@ -147,12 +147,11 @@ async def test_request_id_in_logs_and_outgoing_calls():
 # 3. /metrics Access Control & Prometheus Endpoint Tests
 # =========================================================================
 
+
 @pytest.mark.asyncio
 async def test_metrics_protected_from_public_access():
     """Asserts that /metrics is rejected (401 or 403) when called from a public/untrusted IP without internal credentials."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Public IP forwarded header without internal token
         response = await client.get("/metrics", headers={"X-Forwarded-For": "203.0.113.195"})
         assert response.status_code in (401, 403)
@@ -161,9 +160,7 @@ async def test_metrics_protected_from_public_access():
 @pytest.mark.asyncio
 async def test_metrics_reachable_internally():
     """Asserts that /metrics is reachable when requested internally or with internal metrics token."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Internal loopback request
         response = await client.get("/metrics", headers={"X-Forwarded-For": "127.0.0.1"})
         assert response.status_code == 200
@@ -207,6 +204,7 @@ async def test_metrics_tokens_and_cost_update_after_mocked_llm_call():
 # =========================================================================
 # 4. Audit Log Tests
 # =========================================================================
+
 
 def test_audit_log_records_auth_failures_and_hitl_decisions():
     """Asserts that failed auth and approve/reject actions write single structured audit entries."""
@@ -274,6 +272,7 @@ def test_audit_log_records_auth_failures_and_hitl_decisions():
 # =========================================================================
 # 5. OpenTelemetry & Prompt Capture Configuration Tests
 # =========================================================================
+
 
 def test_opentelemetry_off_by_default_and_toggled_via_env():
     """Asserts that OpenTelemetry is off by default and enabled when OTEL_ENABLED is true."""

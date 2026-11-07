@@ -10,10 +10,11 @@ Tests:
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app import app
-from tripmate.services.travel_service import RUN_STORE
 from tripmate.config.settings import settings
+from tripmate.services.travel_service import RUN_STORE
 
 
 @pytest.mark.asyncio

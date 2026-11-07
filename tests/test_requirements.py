@@ -1,6 +1,5 @@
 import re
 from pathlib import Path
-import pytest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -77,4 +76,3 @@ def test_requirements_txt_pinned_and_no_dev_packages():
     assert not unpinned_entries, f"Unpinned package specifications in requirements.txt: {unpinned_entries}"
     assert not dev_entries_found, f"Dev packages found in runtime requirements.txt: {dev_entries_found}"
     assert not unused_entries_found, f"Unused packages found in requirements.txt: {unused_entries_found}"
-

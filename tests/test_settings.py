@@ -8,14 +8,16 @@ Verifies:
 """
 
 import os
+
 import pytest
+
 from tripmate.config.settings import (
     Settings,
-    _parse_str,
-    _parse_int,
-    _parse_float,
     _parse_bool,
+    _parse_float,
+    _parse_int,
     _parse_list,
+    _parse_str,
 )
 
 
@@ -129,4 +131,3 @@ def test_validate_production_missing_api_key(monkeypatch):
     with pytest.raises(ValueError) as exc:
         s.validate_production()
     assert "API_KEY" in str(exc.value)
-

@@ -7,12 +7,13 @@ in the codebase. They fail against the current unpatched implementation.
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app import app
-from tripmate.config.settings import settings
-from tripmate.database.store import store, generate_token
-from tripmate.services.travel_service import RUN_STORE
 from tripmate.api.dependencies import validate_thread_ownership
+from tripmate.config.settings import settings
+from tripmate.database.store import generate_token, store
+from tripmate.services.travel_service import RUN_STORE
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +46,9 @@ async def test_unauthenticated_hotel_search_should_be_rejected_401():
     """
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get("/api/v1/booking/hotels/search?city_code=NYC&check_in_date=2026-12-01&check_out_date=2026-12-05")
+        res = await client.get(
+            "/api/v1/booking/hotels/search?city_code=NYC&check_in_date=2026-12-01&check_out_date=2026-12-05"
+        )
         assert res.status_code == 401, f"Expected 401 Unauthorized, got {res.status_code}"
 
 
@@ -123,9 +126,7 @@ async def test_runs_replay_unauthorized_user_rejection():
             f"/api/v1/runs/{victim_run_id}/replay",
             headers={"Authorization": f"Bearer {token_b}"},
         )
-        assert res.status_code in (403, 404), (
-            f"Expected 403/404 for unauthorized replay, got {res.status_code}"
-        )
+        assert res.status_code in (403, 404), f"Expected 403/404 for unauthorized replay, got {res.status_code}"
 
 
 @pytest.mark.asyncio

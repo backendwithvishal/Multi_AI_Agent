@@ -6,9 +6,11 @@ os.environ["DATABASE_URL"] = ""
 os.environ["REDIS_URL"] = ""
 
 import gc
+
 import pytest
-from tripmate.middleware import SlidingWindowRateLimiter
+
 from tripmate.database.store import store
+from tripmate.middleware import SlidingWindowRateLimiter
 
 
 @pytest.fixture(autouse=True)

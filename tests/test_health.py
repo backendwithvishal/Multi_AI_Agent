@@ -1,6 +1,7 @@
-import pytest
 from unittest.mock import patch
+
 from fastapi import Response
+
 from app import health_live, health_ready, hybrid_cache
 
 
@@ -38,6 +39,7 @@ def run_coro(coro):
 def async_ret(val):
     async def _inner(*args, **kwargs):
         return val
+
     return _inner
 
 
@@ -51,8 +53,10 @@ def test_health_live_endpoint():
 
 def test_health_ready_when_all_healthy():
     """Readiness probe: 200 when Postgres and Redis are up."""
-    with patch("app.check_db_health", return_value={"status": "healthy"}), \
-         patch.object(hybrid_cache, "ping", side_effect=async_ret(True)):
+    with (
+        patch("app.check_db_health", return_value={"status": "healthy"}),
+        patch.object(hybrid_cache, "ping", side_effect=async_ret(True)),
+    ):
         resp = Response()
         data = run_coro(health_ready(resp))
         assert resp.status_code == 200
@@ -63,8 +67,10 @@ def test_health_ready_when_all_healthy():
 
 def test_health_ready_503_when_postgres_unhealthy():
     """Readiness probe: 503 when Postgres is down."""
-    with patch("app.check_db_health", return_value={"status": "unhealthy", "error": "Connection refused"}), \
-         patch.object(hybrid_cache, "ping", side_effect=async_ret(True)):
+    with (
+        patch("app.check_db_health", return_value={"status": "unhealthy", "error": "Connection refused"}),
+        patch.object(hybrid_cache, "ping", side_effect=async_ret(True)),
+    ):
         resp = Response()
         data = run_coro(health_ready(resp))
         assert resp.status_code == 503
@@ -74,8 +80,10 @@ def test_health_ready_503_when_postgres_unhealthy():
 
 def test_health_ready_503_when_redis_unhealthy():
     """Readiness probe: reports degraded or unhealthy status when Redis is down."""
-    with patch("app.check_db_health", return_value={"status": "healthy"}), \
-         patch.object(hybrid_cache, "ping", side_effect=async_ret(False)):
+    with (
+        patch("app.check_db_health", return_value={"status": "healthy"}),
+        patch.object(hybrid_cache, "ping", side_effect=async_ret(False)),
+    ):
         resp = Response()
         data = run_coro(health_ready(resp))
         assert resp.status_code in (200, 503)
@@ -85,8 +93,10 @@ def test_health_ready_503_when_redis_unhealthy():
 
 def test_health_ready_response_has_no_secrets():
     """Readiness probe response must never leak database URLs, passwords, or keys."""
-    with patch("app.check_db_health", return_value={"status": "unhealthy", "error": "db_err"}), \
-         patch.object(hybrid_cache, "ping", side_effect=async_ret(False)):
+    with (
+        patch("app.check_db_health", return_value={"status": "unhealthy", "error": "db_err"}),
+        patch.object(hybrid_cache, "ping", side_effect=async_ret(False)),
+    ):
         resp = Response()
         data = run_coro(health_ready(resp))
         text = str(data).lower()
