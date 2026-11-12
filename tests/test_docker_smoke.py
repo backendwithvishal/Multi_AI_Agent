@@ -142,5 +142,5 @@ def test_docker_smoke_execution():
     except Exception:
         pytest.skip("Unable to reach Docker daemon")
 
-    res = subprocess.run(["bash", str(BASE_DIR / "scripts" / "smoke_docker.sh")], capture_output=True, text=True)
+    res = subprocess.run(["bash", (BASE_DIR / "scripts" / "smoke_docker.sh").as_posix()], capture_output=True, text=True)
     assert res.returncode == 0, f"Docker smoke script failed:\n{res.stdout}\n{res.stderr}"

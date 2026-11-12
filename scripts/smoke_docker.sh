@@ -4,6 +4,11 @@
 # ==============================================================================
 set -euo pipefail
 
+# Ensure .env exists for docker-compose parsing
+if [ ! -f .env ] && [ -f .env.example ]; then
+    cp .env.example .env
+fi
+
 echo "=== [1/7] Building production Docker image ==="
 docker build -t tripmate:test .
 
