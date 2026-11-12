@@ -14,6 +14,9 @@ docker build -t tripmate:test .
 
 echo "=== [2/7] Validating Compose configs without inline secrets ==="
 export POSTGRES_PASSWORD="test_postgres_smoke_password"
+export GROQ_API_KEY="gsk_test_mock_key_for_smoke_verification_only"
+export API_KEY="test_api_key_for_smoke_verification_only_24ch"
+export SECRET_KEY="test_secret_key_32_chars_long_for_smoke_test"
 CONFIG_DEV=$(docker compose -f docker-compose.yml config)
 CONFIG_PROD=$(docker compose -f docker-compose.prod.yml config)
 
@@ -34,8 +37,15 @@ trap cleanup EXIT
 echo "=== [4/7] Waiting for all services to become healthy ==="
 for service in postgres redis app; do
     echo "Waiting for $service to be healthy..."
+    count=0
     until [ "$(docker compose -f docker-compose.yml ps -q $service | xargs docker inspect -f '{{.State.Health.Status}}' 2>/dev/null || echo 'starting')" == "healthy" ]; do
         sleep 2
+        count=$((count + 2))
+        if [ "$count" -ge 60 ]; then
+            echo "ERROR: Timed out waiting for $service to be healthy!"
+            docker compose -f docker-compose.yml logs "$service" || true
+            exit 1
+        fi
     done
     echo "$service is healthy."
 done
