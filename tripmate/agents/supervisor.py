@@ -8,12 +8,12 @@ The Supervisor Agent orchestrates dynamic plan creation and agent routing:
 """
 
 import logging
-from typing import List, Any
+from typing import Any, List
+
 from pydantic import BaseModel, Field
 
-from tripmate.config.settings import settings
 from tripmate.agents.planner import planner
-from tripmate.agents.registry import agent_registry
+from tripmate.config.settings import settings
 
 logger = logging.getLogger("tripmate.supervisor")
 
@@ -36,6 +36,7 @@ AGENT_ORDER = [
 
 class TripConstraints(BaseModel):
     """Pydantic model representing extracted travel parameters."""
+
     destination: str = Field(default="")
     origin: str = Field(default="")
     duration: str = Field(default="")
@@ -46,6 +47,7 @@ class TripConstraints(BaseModel):
 
 class SupervisorRouting(BaseModel):
     """Structured output containing selected agents and trip constraints."""
+
     selected_agents: List[str] = Field(default_factory=list)
     trip_constraints: TripConstraints = Field(default_factory=TripConstraints)
     reasoning: str = Field(default="")
@@ -57,14 +59,11 @@ async def run_supervisor_routing(llm: Any, user_query: str) -> SupervisorRouting
         plan_dag = await planner.create_plan(llm, user_query)
         selected_set = {task.agent for task in plan_dag.tasks}
 
-        validated_agents = [
-            agent for agent in AGENT_ORDER
-            if agent in selected_set or agent in KNOWN_AGENTS
-        ]
+        validated_agents = [agent for agent in AGENT_ORDER if agent in selected_set or agent in KNOWN_AGENTS]
         if "itinerary_agent" not in validated_agents:
             validated_agents.append("itinerary_agent")
 
-        validated_agents = validated_agents[:settings.MAX_PARALLEL_AGENTS]
+        validated_agents = validated_agents[: settings.MAX_PARALLEL_AGENTS]
 
         raw_constraints = plan_dag.trip_constraints
         constraints = TripConstraints(
@@ -85,6 +84,6 @@ async def run_supervisor_routing(llm: Any, user_query: str) -> SupervisorRouting
         logger.warning(f"Supervisor routing fallback: {exc}")
 
     return SupervisorRouting(
-        selected_agents=AGENT_ORDER[:settings.MAX_PARALLEL_AGENTS],
+        selected_agents=AGENT_ORDER[: settings.MAX_PARALLEL_AGENTS],
         reasoning="Fallback routing selected default workflow.",
     )

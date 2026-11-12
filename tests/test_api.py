@@ -5,7 +5,8 @@ Verifies root metadata, legacy health probes, empty message validation, and appr
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app import app
 from tripmate.config.settings import settings
 
@@ -13,9 +14,7 @@ from tripmate.config.settings import settings
 @pytest.mark.asyncio
 async def test_root_endpoint():
     """Tests GET / root metadata endpoint returning clean JSON."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/")
         assert response.status_code == 200
         assert "application/json" in response.headers.get("content-type", "")
@@ -31,14 +30,10 @@ async def test_root_endpoint():
         assert data["status_endpoint"] == "/api/v1/status"
 
 
-
-
 @pytest.mark.asyncio
 async def test_health_endpoint():
     """Tests GET /health operational status endpoint."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health")
         assert response.status_code == 200
         data = response.json()
@@ -49,9 +44,7 @@ async def test_health_endpoint():
 @pytest.mark.asyncio
 async def test_travel_endpoint_empty_message():
     """Tests validation error when sending empty message to POST /api/travel."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/api/travel", json={"message": "   "})
         assert response.status_code == 400
         data = response.json()
@@ -62,9 +55,7 @@ async def test_travel_endpoint_empty_message():
 @pytest.mark.asyncio
 async def test_approve_endpoint_missing_feedback():
     """Tests validation error when rejecting an itinerary without feedback."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/travel/approve",
             json={"thread_id": "test_thread_123", "approved": False, "feedback": ""},

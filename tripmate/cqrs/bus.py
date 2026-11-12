@@ -5,6 +5,7 @@ Provides unified dispatchers for routing commands and queries to their respectiv
 """
 
 from typing import Any, Callable, Dict, Type
+
 from tripmate.core.singleton import SingletonMeta
 
 

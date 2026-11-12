@@ -5,12 +5,15 @@ Adapts raw AviationStack and GDS flight responses into normalized flight schemas
 """
 
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
+
 from tripmate.schemas.agents import EvidenceItem, EvidenceType, VerificationStatus
 
 
 class NormalizedFlightOffer(BaseModel):
     """Normalized flight offer schema."""
+
     offer_id: str
     airline: str
     origin: str

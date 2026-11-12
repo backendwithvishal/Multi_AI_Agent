@@ -5,7 +5,8 @@ Centralizes the discovery, validation, and dynamic instantiation of specialist a
 """
 
 from typing import Any, Dict, List, Type
-from tripmate.agents.registry import BaseAgent, AgentRegistry, agent_registry
+
+from tripmate.agents.registry import AgentRegistry, BaseAgent, agent_registry
 
 
 class AgentFactory:
@@ -34,9 +35,7 @@ class AgentFactory:
         agent_cls = cls._registry_map.get(agent_name)
         if not agent_cls:
             available = list(cls._registry_map.keys())
-            raise ValueError(
-                f"Unsupported agent type '{agent_name}'. Registered agent types: {available}"
-            )
+            raise ValueError(f"Unsupported agent type '{agent_name}'. Registered agent types: {available}")
         return agent_cls(**kwargs)
 
     @classmethod
@@ -61,12 +60,13 @@ class AgentFactory:
     def _ensure_defaults_registered(cls) -> None:
         if not cls._registry_map:
             from tripmate.agents.specialists import (
+                BudgetAgent,
                 FlightAgent,
                 HotelAgent,
-                WeatherAgent,
-                BudgetAgent,
                 ItineraryAgent,
+                WeatherAgent,
             )
+
             cls._registry_map["flight_agent"] = FlightAgent
             cls._registry_map["hotel_agent"] = HotelAgent
             cls._registry_map["weather_agent"] = WeatherAgent

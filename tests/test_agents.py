@@ -1,12 +1,16 @@
 import json
 from typing import Any, Dict
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from tripmate.agents.supervisor import SupervisorRouting, TripConstraints
 from tripmate.graph.state import TravelState
 from tripmate.graph.workflow import (
-    supervisor_node as supervisor_agent,
     guardrail_blocked_node as guardrail_blocked_agent,
+)
+from tripmate.graph.workflow import (
+    supervisor_node as supervisor_agent,
 )
 
 
@@ -44,7 +48,7 @@ def test_json_from_llm_valid():
 
 
 def test_json_from_llm_invalid():
-    sample = 'No json object in this text string'
+    sample = "No json object in this text string"
     with pytest.raises(ValueError, match="The model did not return a JSON object"):
         _json_from_llm(sample)
 

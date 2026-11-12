@@ -8,10 +8,10 @@ Maintains an immutable, structured audit log for:
 - Sensitive configuration changes
 """
 
-from enum import Enum
 import json
 import logging
 import time
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from tripmate.core.context import get_request_id, get_user_id
@@ -91,4 +91,3 @@ class AuditLogger:
 
 
 audit_logger = AuditLogger()
-

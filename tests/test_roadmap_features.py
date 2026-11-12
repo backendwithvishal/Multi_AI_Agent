@@ -7,15 +7,16 @@ Comprehensive Test Suite for Roadmap & Platform Enhancement Features:
 """
 
 import asyncio
-import pytest
-from httpx import AsyncClient, ASGITransport
-from app import app
 
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app import app
 from tripmate.database.migrator import get_alembic_config, get_migration_history
-from tripmate.middleware.metrics import metrics_registry
-from tripmate.tasks.queue import task_queue, AsyncTaskQueue
-from tripmate.integrations.gds import gds_client
 from tripmate.database.store import generate_token
+from tripmate.integrations.gds import gds_client
+from tripmate.middleware.metrics import metrics_registry
+from tripmate.tasks.queue import AsyncTaskQueue, task_queue
 
 
 @pytest.fixture
@@ -34,6 +35,7 @@ def admin_headers():
 # 1. Alembic Migration Pipeline Tests (P1)
 # =========================================================
 
+
 def test_alembic_configuration_and_history():
     """Verifies that Alembic configuration and migration revisions are properly initialized."""
     config = get_alembic_config()
@@ -48,6 +50,7 @@ def test_alembic_configuration_and_history():
 # =========================================================
 # 2. Prometheus Observability Metrics Tests (P2)
 # =========================================================
+
 
 @pytest.mark.asyncio
 async def test_prometheus_metrics_registry():
@@ -81,11 +84,12 @@ async def test_prometheus_metrics_endpoints():
 # 3. Background Task Queue & Worker Tests (P3)
 # =========================================================
 
+
 @pytest.mark.asyncio
 async def test_task_queue_execution():
     """Tests task submission, worker execution, and status completion."""
     custom_queue = AsyncTaskQueue(max_concurrent_workers=2)
-    
+
     async def sample_handler(payload):
         await asyncio.sleep(0.01)
         return {"doubled": payload.get("val", 0) * 2}
@@ -152,6 +156,7 @@ async def test_tasks_api_lifecycle(auth_headers):
 # =========================================================
 # 4. GDS Travel Booking & Search Tests (P4 / Long-term)
 # =========================================================
+
 
 @pytest.mark.asyncio
 async def test_gds_client_operations():

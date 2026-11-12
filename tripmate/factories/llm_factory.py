@@ -6,7 +6,8 @@ Validates configurations and fails with descriptive error messages when unsuppor
 providers or missing credentials are requested.
 """
 
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict
+
 from tripmate.strategies.llm_strategies import (
     GroqProviderStrategy,
     HuggingFaceProviderStrategy,
@@ -47,9 +48,7 @@ class LLMClientFactory:
         strategy = cls._strategies.get(normalized_provider)
         if not strategy:
             available = list(cls._strategies.keys())
-            raise ValueError(
-                f"Unsupported LLM provider '{provider}'. Available providers: {available}"
-            )
+            raise ValueError(f"Unsupported LLM provider '{provider}'. Available providers: {available}")
 
         if not strategy.is_configured():
             raise ValueError(
@@ -58,9 +57,7 @@ class LLMClientFactory:
 
         client = strategy.create_model(tier=tier, timeout=timeout)
         if client is None:
-            raise RuntimeError(
-                f"Failed to initialize client for provider '{provider}' and tier '{tier.value}'."
-            )
+            raise RuntimeError(f"Failed to initialize client for provider '{provider}' and tier '{tier.value}'.")
         return client
 
     @classmethod

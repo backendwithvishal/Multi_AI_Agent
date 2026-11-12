@@ -10,15 +10,17 @@ Agents expose standardized metadata:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
 
-from tripmate.schemas.agents import StructuredAgentOutput
 from tripmate.core.singleton import SingletonMeta
+from tripmate.schemas.agents import StructuredAgentOutput
 
 
 class AgentMetadata(BaseModel):
     """Declarative metadata describing an agent's capabilities and operational parameters."""
+
     name: str
     description: str
     capabilities: List[str] = []

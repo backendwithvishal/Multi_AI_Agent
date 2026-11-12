@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 @dataclass
 class WorkflowEvent:
     """Base class for all in-process workflow events."""
+
     thread_id: str
     run_id: str
     event_type: str = "workflow.event"

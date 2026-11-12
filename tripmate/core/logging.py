@@ -16,10 +16,15 @@ import os
 import re
 import sys
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 from tripmate.config.settings import settings
-from tripmate.core.context import get_request_id, get_user_id, get_thread_id, hash_thread_id
+from tripmate.core.context import (
+    get_request_id,
+    get_thread_id,
+    get_user_id,
+    hash_thread_id,
+)
 
 # Regex compilation for sensitive pattern masking
 RE_GROQ_KEY = re.compile(r"gsk_[a-zA-Z0-9_\-]{16,}")
@@ -43,7 +48,7 @@ RE_CREDIT_CARD = re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b")
 RE_SSN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 
 # Prompt capture redaction pattern
-RE_PROMPT_PREFIX = re.compile(r'(?i)(prompt\s*[:=]\s*)([^\n\r,{}]+)')
+RE_PROMPT_PREFIX = re.compile(r"(?i)(prompt\s*[:=]\s*)([^\n\r,{}]+)")
 
 
 def redact_sensitive_data(val: Any, capture_prompts: Optional[bool] = None) -> Any:
@@ -90,7 +95,14 @@ def redact_sensitive_data(val: Any, capture_prompts: Optional[bool] = None) -> A
 
     elif isinstance(val, dict):
         sanitized_dict = {}
-        prompt_keys = {"prompt", "messages", "user_query", "query", "user_message", "input"}
+        prompt_keys = {
+            "prompt",
+            "messages",
+            "user_query",
+            "query",
+            "user_message",
+            "input",
+        }
         for k, v in val.items():
             key_str = str(k).lower()
             if not capture_prompts and key_str in prompt_keys:
@@ -128,7 +140,11 @@ class RedactingJsonFormatter(logging.Formatter):
         th_hash = getattr(record, "thread_id_hash", None) or hash_thread_id(raw_thread_id)
         route = getattr(record, "route", None) or getattr(record, "path", None)
         status_val = getattr(record, "status", None) or getattr(record, "status_code", None)
-        latency = getattr(record, "latency", None) or getattr(record, "latency_ms", None) or getattr(record, "duration_ms", None)
+        latency = (
+            getattr(record, "latency", None)
+            or getattr(record, "latency_ms", None)
+            or getattr(record, "duration_ms", None)
+        )
 
         # Format message and apply redaction
         try:
@@ -139,7 +155,9 @@ class RedactingJsonFormatter(logging.Formatter):
         safe_msg = redact_sensitive_data(raw_msg)
 
         log_payload: Dict[str, Any] = {
-            "timestamp": self.formatTime(record, self.datefmt) if self.datefmt else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
+            "timestamp": self.formatTime(record, self.datefmt)
+            if self.datefmt
+            else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
             "level": record.levelname,
             "logger": record.name,
             "message": safe_msg,
@@ -179,4 +197,3 @@ def get_structured_logger(name: str) -> logging.Logger:
         logger.propagate = False
 
     return logger
-

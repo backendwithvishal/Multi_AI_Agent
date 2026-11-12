@@ -8,7 +8,8 @@ and telemetry.
 
 import uuid
 from typing import Any, Dict, Optional
-from tripmate.services.observability import estimate_tokens, calculate_cost
+
+from tripmate.services.observability import calculate_cost, estimate_tokens
 
 
 class TravelPlanResponseBuilder:
@@ -48,11 +49,7 @@ class TravelPlanResponseBuilder:
         if interrupt_data:
             answer = interrupt_data.get("draft_itinerary") or self._raw_result.get("itinerary", "")
 
-        effective_run_id = (
-            self._run_id
-            or self._raw_result.get("run_id")
-            or f"run_{uuid.uuid4().hex[:12]}"
-        )
+        effective_run_id = self._run_id or self._raw_result.get("run_id") or f"run_{uuid.uuid4().hex[:12]}"
 
         raw_metrics = self._raw_result.get("metrics", {})
         if isinstance(raw_metrics, dict):
@@ -72,9 +69,7 @@ class TravelPlanResponseBuilder:
         return {
             "run_id": effective_run_id,
             "thread_id": self._thread_id,
-            "status": self._raw_result.get(
-                "status", "COMPLETED" if not interrupt_data else "WAITING_FOR_APPROVAL"
-            ),
+            "status": self._raw_result.get("status", "COMPLETED" if not interrupt_data else "WAITING_FOR_APPROVAL"),
             "answer": answer,
             "requires_approval": interrupt_data is not None,
             "approval_request": (
@@ -87,9 +82,7 @@ class TravelPlanResponseBuilder:
             "weather_results": self._raw_result.get("weather_results", ""),
             "budget_results": self._raw_result.get("budget_results", ""),
             "itinerary": (
-                interrupt_data.get("draft_itinerary", "")
-                if interrupt_data
-                else self._raw_result.get("itinerary", "")
+                interrupt_data.get("draft_itinerary", "") if interrupt_data else self._raw_result.get("itinerary", "")
             ),
             "selected_agents": self._raw_result.get("selected_agents", []),
             "trip_constraints": self._raw_result.get("trip_constraints", {}),

@@ -143,5 +143,5 @@ __marimo__/
 
 # 10. Documentation Builds
 
-=docs/_build/
+docs/_build/
 /site

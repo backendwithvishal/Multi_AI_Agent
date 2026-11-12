@@ -35,6 +35,7 @@ Run with:
 from __future__ import annotations
 
 import os
+
 os.environ["APP_ENV"] = "test"
 os.environ["ENV"] = "test"
 os.environ["DATABASE_URL"] = ""
@@ -43,28 +44,29 @@ os.environ["REDIS_URL"] = ""
 import asyncio
 import inspect
 from unittest.mock import MagicMock
+
 import pytest
-from fastapi import Response, Request, HTTPException
+from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from tripmate.config.settings import settings
-from tripmate.repositories.store_repositories import user_repository
+from tripmate.database.store import store
 from tripmate.schemas import (
-    UserRegisterRequest,
-    UserLoginRequest,
+    AIAgentInvokeRequest,
+    ApprovalRequest,
+    CurrencyConversionRequest,
+    FinancialCalculationRequest,
     ForgotPasswordRequest,
     TravelRequest,
-    ApprovalRequest,
+    UserLoginRequest,
+    UserRegisterRequest,
     WatchlistCreateRequest,
-    FinancialCalculationRequest,
-    CurrencyConversionRequest,
-    AIAgentInvokeRequest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test Helpers & Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _run(coro_or_val):
     """Executes a coroutine safely without creating a Windows socket-based event loop."""
@@ -88,13 +90,15 @@ def _run(coro_or_val):
             else:
                 val = res
         except StopIteration as stop:
-            # stack.pop()
+            stack.pop()
             val = stop.value
+            exc = None
         except Exception as e:
-            # stack.pop()
+            stack.pop()
             if not stack:
                 raise
             exc = e
+            val = None
     return val
 
 
@@ -114,8 +118,10 @@ def _mock_request(path: str = "/api/v1/test", method: str = "GET") -> Request:
 @pytest.fixture(autouse=True)
 def direct_to_thread(monkeypatch):
     """Executes asyncio.to_thread callables immediately in the test thread."""
+
     async def _direct(func, *args, **kwargs):
         return func(*args, **kwargs)
+
     monkeypatch.setattr(asyncio, "to_thread", _direct)
 
 
@@ -123,10 +129,12 @@ def direct_to_thread(monkeypatch):
 # 1. Health & Status Telemetry Examples
 # ---------------------------------------------------------------------------
 
+
 class TestHealthDocExamples:
     def test_health_telemetry_documented_fields(self):
         """Documented GET /api/v1/health returns status ok, service, version, and telemetry blocks."""
         from tripmate.api.v1.routes.health import health_telemetry
+
         req = _mock_request("/api/v1/health")
         res = _run(health_telemetry(req))
         assert res["status"] == "ok"
@@ -141,6 +149,7 @@ class TestHealthDocExamples:
     def test_liveness_documented_fields(self):
         """Documented GET /api/v1/liveness returns status alive and service."""
         from tripmate.api.v1.routes.health import liveness_probe
+
         res = _run(liveness_probe())
         assert res["status"] == "alive"
         assert res["service"] == settings.APP_NAME
@@ -148,6 +157,7 @@ class TestHealthDocExamples:
     def test_readiness_probe_documented_fields(self):
         """Documented GET /api/v1/readiness returns status ready or not_ready."""
         from tripmate.api.v1.routes.health import readiness_probe
+
         resp = Response()
         res = _run(readiness_probe(resp))
         assert res["status"] in ("ready", "not_ready")
@@ -156,6 +166,7 @@ class TestHealthDocExamples:
     def test_status_telemetry_documented_fields(self):
         """Documented GET /api/v1/status returns APIResponse envelope with OPERATIONAL status."""
         from tripmate.api.v1.routes.status import get_system_status
+
         req = _mock_request("/api/v1/status")
         res = _run(get_system_status(req))
         body = res.model_dump() if hasattr(res, "model_dump") else res
@@ -169,10 +180,12 @@ class TestHealthDocExamples:
 # 2. Authentication Examples
 # ---------------------------------------------------------------------------
 
+
 class TestAuthDocExamples:
     def test_register_documented_example(self):
         """Documented POST /api/v1/auth/register creates user and returns JWT token."""
         from tripmate.api.v1.routes.auth import register
+
         req = _mock_request("/api/v1/auth/register", "POST")
         payload = UserRegisterRequest(
             username="doc_example_user_01",
@@ -193,6 +206,7 @@ class TestAuthDocExamples:
     def test_login_invalid_credentials_documented_error(self):
         """Documented POST /api/v1/auth/login invalid credentials returns 401."""
         from tripmate.api.v1.routes.auth import login
+
         req = _mock_request("/api/v1/auth/login", "POST")
         payload = UserLoginRequest(
             username_or_email="nonexistent_user_999",
@@ -209,8 +223,9 @@ class TestAuthDocExamples:
         """Documented GET /api/v1/auth/me returns authenticated user identity."""
         from tripmate.api.v1.routes.auth import get_me
         from tripmate.database.store import hash_password
-        # Ensure user exists in user_repository for profile retrieval
-        created = user_repository.create(
+
+        # Ensure user exists in store for profile retrieval
+        created = store.create_user(
             username="doc_user_me",
             email="doc_user_me@example.com",
             password_hash=hash_password("Pass123!"),
@@ -225,6 +240,7 @@ class TestAuthDocExamples:
     def test_forgot_password_documented_flow(self):
         """Documented POST /api/v1/auth/forgot-password returns 200 with receipt message."""
         from tripmate.api.v1.routes.auth import forgot_password
+
         req = _mock_request("/api/v1/auth/forgot-password", "POST")
         payload = ForgotPasswordRequest(email="someone@example.com")
         res = _run(forgot_password(payload, req))
@@ -236,6 +252,7 @@ class TestAuthDocExamples:
 # ---------------------------------------------------------------------------
 # 3. Travel Workflows & Human-in-the-Loop Approval
 # ---------------------------------------------------------------------------
+
 
 class TestTravelDocExamples:
     def test_travel_execution_documented_response(self, monkeypatch):
@@ -267,6 +284,7 @@ class TestTravelDocExamples:
     def test_approve_rejection_without_feedback_returns_400(self):
         """Documented POST /api/v1/travel/approve requires feedback when approved=false."""
         from tripmate.api.v1.routes.approval import approve_travel_plan
+
         req = _mock_request("/api/v1/travel/approve", "POST")
         payload = ApprovalRequest(
             thread_id="thread_doc_test",
@@ -307,10 +325,12 @@ class TestTravelDocExamples:
 # 4. Watchlists & Alerts Examples
 # ---------------------------------------------------------------------------
 
+
 class TestWatchlistDocExamples:
     def test_list_watchlists_documented_response(self):
         """Documented GET /api/v1/watchlists returns array of watchlist items."""
         from tripmate.api.v1.routes.watchlists import list_watchlists
+
         req = _mock_request("/api/v1/watchlists")
         res = _run(list_watchlists(req, current_user={"id": "doc_user"}))
         body = res.model_dump() if hasattr(res, "model_dump") else res
@@ -320,6 +340,7 @@ class TestWatchlistDocExamples:
     def test_create_and_get_watchlist_documented_flow(self):
         """Documented POST and GET /api/v1/watchlists creates and reads watchlist."""
         from tripmate.api.v1.routes.watchlists import create_watchlist, get_watchlist
+
         req = _mock_request("/api/v1/watchlists", "POST")
         payload = WatchlistCreateRequest(
             title="Tokyo Cherry Blossom Flights",
@@ -342,6 +363,7 @@ class TestWatchlistDocExamples:
     def test_get_nonexistent_watchlist_returns_404(self):
         """Documented GET /api/v1/watchlists/{id} missing item returns 404."""
         from tripmate.api.v1.routes.watchlists import get_watchlist
+
         req = _mock_request("/api/v1/watchlists/nonexistent-id")
         with pytest.raises(HTTPException) as excinfo:
             _run(get_watchlist("nonexistent-id", req, current_user={"id": "doc_user"}))
@@ -350,6 +372,7 @@ class TestWatchlistDocExamples:
     def test_list_alerts_documented_response(self):
         """Documented GET /api/v1/alerts returns notification list."""
         from tripmate.api.v1.routes.alerts import list_alerts
+
         req = _mock_request("/api/v1/alerts")
         res = _run(list_alerts(req, current_user={"id": "doc_user"}))
         body = res.model_dump() if hasattr(res, "model_dump") else res
@@ -361,10 +384,12 @@ class TestWatchlistDocExamples:
 # 5. Financial Calculation Examples
 # ---------------------------------------------------------------------------
 
+
 class TestFinancialDocExamples:
     def test_financial_calculate_documented_formula(self):
         """Documented POST /api/v1/financial/calculate calculates itemized trip totals."""
         from tripmate.api.v1.routes.financial import calculate_finances
+
         req = _mock_request("/api/v1/financial/calculate", "POST")
         payload = FinancialCalculationRequest(
             flight_estimate=450.0,
@@ -389,6 +414,7 @@ class TestFinancialDocExamples:
     def test_financial_convert_unsupported_currency_returns_400(self):
         """Documented POST /api/v1/financial/convert with unsupported currency returns 400."""
         from tripmate.api.v1.routes.financial import convert_currency
+
         req = _mock_request("/api/v1/financial/convert", "POST")
         payload = CurrencyConversionRequest(
             amount=100.0,
@@ -404,10 +430,12 @@ class TestFinancialDocExamples:
 # 6. Background Task Examples
 # ---------------------------------------------------------------------------
 
+
 class TestTasksDocExamples:
     def test_submit_unregistered_task_returns_400(self):
         """Documented POST /api/v1/tasks/submit with unknown handler returns 400."""
-        from tripmate.api.v1.routes.tasks import submit_task, TaskSubmitRequest
+        from tripmate.api.v1.routes.tasks import TaskSubmitRequest, submit_task
+
         req = _mock_request("/api/v1/tasks/submit", "POST")
         payload = TaskSubmitRequest(
             task_name="nonexistent_task_type",
@@ -420,6 +448,7 @@ class TestTasksDocExamples:
     def test_get_nonexistent_task_returns_404(self):
         """Documented GET /api/v1/tasks/{id} missing task returns 404."""
         from tripmate.api.v1.routes.tasks import get_task_status
+
         req = _mock_request("/api/v1/tasks/nonexistent-task-id")
         with pytest.raises(HTTPException) as excinfo:
             _run(get_task_status("nonexistent-task-id", req, current_user={"id": "doc_user"}))
@@ -428,6 +457,7 @@ class TestTasksDocExamples:
     def test_list_tasks_documented_response(self):
         """Documented GET /api/v1/tasks returns list of submitted tasks."""
         from tripmate.api.v1.routes.tasks import list_tasks
+
         req = _mock_request("/api/v1/tasks")
         res = _run(list_tasks(req, status_filter=None, limit=50, current_user={"id": "doc_user"}))
         body = res.model_dump() if hasattr(res, "model_dump") else res
@@ -439,10 +469,12 @@ class TestTasksDocExamples:
 # 7. Run Observability Examples
 # ---------------------------------------------------------------------------
 
+
 class TestRunsDocExamples:
     def test_get_nonexistent_run_returns_404(self):
         """Documented GET /api/v1/runs/{id} missing run returns 404."""
         from tripmate.api.v1.routes.runs import get_run_details
+
         req = _mock_request("/api/v1/runs/nonexistent-run-id")
         with pytest.raises(HTTPException) as excinfo:
             _run(get_run_details("nonexistent-run-id", req, user_identity="doc_user"))
@@ -451,6 +483,7 @@ class TestRunsDocExamples:
     def test_get_nonexistent_run_metrics_returns_404(self):
         """Documented GET /api/v1/runs/{id}/metrics missing run returns 404."""
         from tripmate.api.v1.routes.runs import get_run_metrics
+
         req = _mock_request("/api/v1/runs/nonexistent-run-id/metrics")
         with pytest.raises(HTTPException) as excinfo:
             _run(get_run_metrics("nonexistent-run-id", req, user_identity="doc_user"))
@@ -461,10 +494,12 @@ class TestRunsDocExamples:
 # 8. AI Direct Invocations
 # ---------------------------------------------------------------------------
 
+
 class TestAIDocExamples:
     def test_invoke_unregistered_agent_returns_404(self):
         """Documented POST /api/v1/ai/agents/{name}/invoke missing agent returns 404."""
         from tripmate.api.v1.routes.ai import invoke_agent
+
         req = _mock_request("/api/v1/ai/agents/nonexistent_agent/invoke", "POST")
         payload = AIAgentInvokeRequest(query="find me a flight", context={})
         with pytest.raises(HTTPException) as excinfo:

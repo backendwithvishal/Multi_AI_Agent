@@ -7,11 +7,12 @@ They fail against the current unpatched implementation.
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app import app
+from tripmate.agents.guardrail import strip_delimiter_tags
 from tripmate.config.settings import settings
 from tripmate.database.store import generate_token
-from tripmate.agents.guardrail import strip_delimiter_tags
 
 
 @pytest.fixture(autouse=True)

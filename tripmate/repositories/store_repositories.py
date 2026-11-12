@@ -30,6 +30,7 @@ class StoreUserRepository(IUserRepository):
     def store(self):
         if self._store is None:
             from tripmate.database.store import store
+
             self._store = store
         return self._store
 
@@ -62,6 +63,7 @@ class StoreWatchlistRepository(IWatchlistRepository):
     def store(self):
         if self._store is None:
             from tripmate.database.store import store
+
             self._store = store
         return self._store
 
@@ -103,6 +105,7 @@ class StoreAlertRepository(IAlertRepository):
     def store(self):
         if self._store is None:
             from tripmate.database.store import store
+
             self._store = store
         return self._store
 
@@ -144,6 +147,7 @@ class StoreAssetRepository(IAssetRepository):
     def store(self):
         if self._store is None:
             from tripmate.database.store import store
+
             self._store = store
         return self._store
 
@@ -185,6 +189,7 @@ class StoreThreadOwnerRepository(IThreadOwnerRepository):
     def store(self):
         if self._store is None:
             from tripmate.database.store import store
+
             self._store = store
         return self._store
 

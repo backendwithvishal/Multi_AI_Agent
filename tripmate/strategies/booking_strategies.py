@@ -6,7 +6,8 @@ Defines strategy contracts and concrete search strategies for Flight and Hotel i
 
 import secrets
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
+
 from tripmate.config.settings import settings
 
 
@@ -51,7 +52,9 @@ class AmadeusSandboxFlightStrategy(IFlightSearchStrategy):
         adults: int = 1,
         cabin_class: str = "ECONOMY",
     ) -> Dict[str, Any]:
-        base_price = 350.00 if cabin_class.upper() == "ECONOMY" else (780.00 if cabin_class.upper() == "PREMIUM" else 1450.00)
+        base_price = (
+            350.00 if cabin_class.upper() == "ECONOMY" else (780.00 if cabin_class.upper() == "PREMIUM" else 1450.00)
+        )
         offers = [
             {
                 "offer_id": f"flt_off_{secrets.token_hex(6)}",

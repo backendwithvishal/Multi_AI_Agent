@@ -15,7 +15,8 @@ Covers:
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app import app
 from tripmate.config.settings import settings
 
@@ -376,3 +377,85 @@ async def test_ai_orchestration_module():
             json={"agent_name": "unknown_crypto_agent", "query": "Test"},
         )
         assert resp_bad_agent.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_travel_domain_naming_conventions():
+    """Validates Phase 2 domain naming: /budget, /price-watches, /notifications, /documents."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Budget calculation via canonical /budget/calculate
+        calc_res = await client.post(
+            "/api/v1/budget/calculate",
+            json={
+                "flight_estimate": 400.0,
+                "hotel_nightly_rate": 100.0,
+                "nights": 3,
+                "daily_food_allowance": 50.0,
+                "activities_budget": 100.0,
+                "tax_rate_pct": 10.0,
+                "contingency_buffer_pct": 5.0,
+                "currency": "USD",
+            },
+        )
+        assert calc_res.status_code == 200
+        assert calc_res.json()["data"]["subtotal"] == 950.0
+
+        # 2. Currency conversion via canonical /budget/convert
+        conv_res = await client.post(
+            "/api/v1/budget/convert",
+            json={"amount": 100.0, "from_currency": "USD", "to_currency": "EUR"},
+        )
+        assert conv_res.status_code == 200
+        assert conv_res.json()["data"]["converted_amount"] == 92.0
+
+        # 3. Price watches via canonical /price-watches
+        pw_create = await client.post(
+            "/api/v1/price-watches",
+            json={
+                "title": "Kyoto Ryokan Watch",
+                "target_type": "hotel",
+                "target_value": "Kyoto",
+                "threshold_price": 200.0,
+            },
+        )
+        assert pw_create.status_code == 200
+        pw_id = pw_create.json()["data"]["id"]
+
+        pw_list = await client.get("/api/v1/price-watches")
+        assert pw_list.status_code == 200
+        assert any(item["id"] == pw_id for item in pw_list.json()["data"])
+
+        # 4. Notifications via canonical /notifications and /price-alerts
+        notif_create = await client.post(
+            "/api/v1/notifications",
+            json={
+                "title": "Hotel price dropped below threshold",
+                "message": "Ryokan dropped to $180",
+                "alert_type": "price_drop",
+                "severity": "info",
+                "watchlist_id": pw_id,
+            },
+        )
+        assert notif_create.status_code == 200
+        notif_id = notif_create.json()["data"]["id"]
+
+        notif_list = await client.get("/api/v1/price-alerts")
+        assert notif_list.status_code == 200
+        assert any(item["id"] == notif_id for item in notif_list.json()["data"])
+
+        # 5. Travel documents via canonical /documents
+        doc_create = await client.post(
+            "/api/v1/documents",
+            json={
+                "name": "Japan Rail Pass Voucher",
+                "asset_type": "ticket",
+                "trip_id": "trip_japan_2026",
+                "content_uri": "https://vault.example.com/jrpass.pdf",
+            },
+        )
+        assert doc_create.status_code == 200
+        doc_id = doc_create.json()["data"]["id"]
+
+        doc_list = await client.get("/api/v1/documents?trip_id=trip_japan_2026")
+        assert doc_list.status_code == 200
+        assert any(item["id"] == doc_id for item in doc_list.json()["data"])

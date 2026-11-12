@@ -11,12 +11,14 @@ Endpoints:
 
 import asyncio
 from typing import Any, Dict, List
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from tripmate.schemas import APIResponse, AdminStatsResponse, UserRegisterRequest
+
+from tripmate.api.dependencies import require_admin
+from tripmate.core.audit import AuditEventType, audit_logger
+from tripmate.schemas import AdminStatsResponse, APIResponse, UserRegisterRequest
 from tripmate.services.admin_service import admin_service
 from tripmate.services.travel_service import RUN_STORE
-from tripmate.api.dependencies import require_admin
-from tripmate.core.audit import audit_logger, AuditEventType
 
 router = APIRouter(prefix="/admin", tags=["Platform Administration"])
 

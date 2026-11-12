@@ -6,6 +6,7 @@ strictly separating domain write operations from read representations.
 """
 
 from typing import Any, Dict, List, Optional
+
 from tripmate.cqrs.commands import (
     CreateAlertCommand,
     CreateAssetCommand,
@@ -145,6 +146,7 @@ class RunQueryHandlers:
     def store(self):
         if self._store is None:
             from tripmate.services.travel_service import RUN_STORE
+
             self._store = RUN_STORE
         return self._store
 

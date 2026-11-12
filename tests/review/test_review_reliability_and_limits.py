@@ -7,11 +7,12 @@ They fail against the current unpatched implementation.
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
+
 from app import app
 from tripmate.config.settings import settings
+from tripmate.core.audit import AuditEventType, audit_logger
 from tripmate.database.store import generate_token
-from tripmate.core.audit import audit_logger, AuditEventType
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +32,6 @@ async def test_token_budget_per_user_enforced():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Simulate high token consumption by user
-        from tripmate.services.observability import calculate_cost
         # In a hardened system, a quota tracker tracks user consumption
         # Here we test that making calls beyond budget is stopped
         res = await client.post(
@@ -64,13 +64,11 @@ async def test_security_headers_present_on_rate_limit_429_responses():
             if res.status_code == 429:
                 break
 
-        assert res is not None and res.status_code == 429, f"Failed to trigger 429 rate limit: got {res.status_code if res else 'None'}"
-        assert "X-Content-Type-Options" in res.headers, (
-            "Missing X-Content-Type-Options header on 429 response"
+        assert res is not None and res.status_code == 429, (
+            f"Failed to trigger 429 rate limit: got {res.status_code if res else 'None'}"
         )
-        assert "Content-Security-Policy" in res.headers, (
-            "Missing Content-Security-Policy header on 429 response"
-        )
+        assert "X-Content-Type-Options" in res.headers, "Missing X-Content-Type-Options header on 429 response"
+        assert "Content-Security-Policy" in res.headers, "Missing Content-Security-Policy header on 429 response"
 
 
 @pytest.mark.asyncio
@@ -105,7 +103,8 @@ async def test_audit_logger_not_marking_failed_approvals_as_success():
 
             # Verify that audit log does NOT contain a "success" record for this failed action
             successful_approval_records = [
-                r for r in audit_records
+                r
+                for r in audit_records
                 if r.get("event_type") == AuditEventType.APPROVAL_DECISION
                 and r.get("target_id") == non_existent_thread
                 and r.get("status") == "success"

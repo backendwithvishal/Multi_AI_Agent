@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import List, Set
 
 import pytest
-from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -35,6 +34,7 @@ SECURITY_MD = ROOT / "SECURITY.md"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -42,11 +42,8 @@ def _read(path: Path) -> str:
 def _settings_fields() -> Set[str]:
     """Return all uppercase field names defined in the Settings pydantic model."""
     from tripmate.config.settings import Settings
-    return {
-        name
-        for name in Settings.model_fields
-        if name == name.upper()
-    }
+
+    return {name for name in Settings.model_fields if name == name.upper()}
 
 
 def _env_example_keys() -> Set[str]:
@@ -152,6 +149,7 @@ def _all_test_functions() -> Set[str]:
 # 1. Env var coverage
 # ---------------------------------------------------------------------------
 
+
 class TestEnvVarCoverage:
     """Every env var in the README table must be in .env.example and Settings."""
 
@@ -162,14 +160,14 @@ class TestEnvVarCoverage:
     # Known vars that appear in README prose but are not user-configurable
     # settings fields (they are OS-level or computed).
     EXEMPT_FROM_SETTINGS = {
-        "PYTEST_CURRENT_TEST",      # set by pytest itself
-        "LANGCHAIN_HIDE_INPUTS",    # set programmatically in settings.__init__
-        "LANGCHAIN_HIDE_OUTPUTS",   # set programmatically in settings.__init__
+        "PYTEST_CURRENT_TEST",  # set by pytest itself
+        "LANGCHAIN_HIDE_INPUTS",  # set programmatically in settings.__init__
+        "LANGCHAIN_HIDE_OUTPUTS",  # set programmatically in settings.__init__
     }
 
     # Vars not in .env.example because they are single-sourced or computed
     EXEMPT_FROM_ENV_EXAMPLE = {
-        "APP_VERSION",              # single-sourced from pyproject.toml
+        "APP_VERSION",  # single-sourced from pyproject.toml
         "PYTEST_CURRENT_TEST",
         "LANGCHAIN_HIDE_INPUTS",
         "LANGCHAIN_HIDE_OUTPUTS",
@@ -180,18 +178,14 @@ class TestEnvVarCoverage:
         """Every env var documented in README must appear in .env.example."""
         if var in self.EXEMPT_FROM_SETTINGS or var in self.EXEMPT_FROM_ENV_EXAMPLE:
             pytest.skip(f"{var!r} is exempt (set by runtime or single-sourced)")
-        assert var in self.ENV_EXAMPLE_KEYS, (
-            f"Env var {var!r} is in the README table but missing from .env.example"
-        )
+        assert var in self.ENV_EXAMPLE_KEYS, f"Env var {var!r} is in the README table but missing from .env.example"
 
     @pytest.mark.parametrize("var", sorted(README_VARS - EXEMPT_FROM_SETTINGS - EXEMPT_FROM_ENV_EXAMPLE))
     def test_readme_var_in_settings(self, var: str):
         """Every env var documented in README must be a Settings field."""
         if var in self.EXEMPT_FROM_SETTINGS or var in self.EXEMPT_FROM_ENV_EXAMPLE:
             pytest.skip(f"{var!r} is exempt")
-        assert var in self.SETTINGS_FIELDS, (
-            f"Env var {var!r} is in the README table but not a Settings field"
-        )
+        assert var in self.SETTINGS_FIELDS, f"Env var {var!r} is in the README table but not a Settings field"
 
     def test_env_example_completeness(self):
         """Spot-check: no env-example key is entirely absent from Settings or README."""
@@ -200,14 +194,14 @@ class TestEnvVarCoverage:
         # We do not hard-fail here; we just report for now.
         if undocumented:
             import warnings
-            warnings.warn(
-                f"These .env.example keys are not in the README env table: {sorted(undocumented)}"
-            )
+
+            warnings.warn(f"These .env.example keys are not in the README env table: {sorted(undocumented)}")
 
 
 # ---------------------------------------------------------------------------
 # 2. Endpoint coverage
 # ---------------------------------------------------------------------------
+
 
 class TestEndpointCoverage:
     """Every endpoint in the README must exist in the FastAPI route table."""
@@ -221,9 +215,7 @@ class TestEndpointCoverage:
         method, path = endpoint.split(" ", 1)
         # Handle parameterised paths: /api/v1/runs/{run_id} vs /api/v1/runs/{run_id}/metrics
         registered = {r.split(" ", 1)[1] for r in self.APP_ROUTES}
-        assert path in registered, (
-            f"Endpoint {endpoint!r} is documented in README but not registered in FastAPI app"
-        )
+        assert path in registered, f"Endpoint {endpoint!r} is documented in README but not registered in FastAPI app"
 
     def test_all_v1_routes_are_documented(self):
         """Every /api/v1/* route should appear in README (warn only, not hard-fail)."""
@@ -232,6 +224,7 @@ class TestEndpointCoverage:
         undocumented = {r.split(" ", 1)[1] for r in v1_routes} - readme_paths
         if undocumented:
             import warnings
+
             warnings.warn(f"App routes not documented in README: {sorted(undocumented)}")
 
 
@@ -239,16 +232,17 @@ class TestEndpointCoverage:
 # 3. Version consistency
 # ---------------------------------------------------------------------------
 
+
 class TestVersionConsistency:
     """Version in pyproject.toml == settings.APP_VERSION == /api/v1/health."""
 
     def test_pyproject_version_matches_settings(self):
         """pyproject.toml version must equal settings.APP_VERSION."""
         from tripmate.config.settings import settings
+
         pyproject_ver = _pyproject_version()
         assert pyproject_ver == settings.APP_VERSION, (
-            f"pyproject.toml version={pyproject_ver!r} "
-            f"!= settings.APP_VERSION={settings.APP_VERSION!r}"
+            f"pyproject.toml version={pyproject_ver!r} != settings.APP_VERSION={settings.APP_VERSION!r}"
         )
 
     def test_health_endpoint_returns_correct_version(self):
@@ -263,22 +257,21 @@ class TestVersionConsistency:
         except StopIteration as e:
             health_data = e.value
         assert health_data.get("version") == settings.APP_VERSION, (
-            f"/health returned version={health_data.get('version')!r} "
-            f"but expected {settings.APP_VERSION!r}"
+            f"/health returned version={health_data.get('version')!r} but expected {settings.APP_VERSION!r}"
         )
 
     def test_app_title_matches_product_name(self):
         """FastAPI app title must match settings.APP_NAME (canonical product name)."""
         from app import app
         from tripmate.config.settings import settings
-        assert app.title == settings.APP_NAME, (
-            f"FastAPI title={app.title!r} != APP_NAME={settings.APP_NAME!r}"
-        )
+
+        assert app.title == settings.APP_NAME, f"FastAPI title={app.title!r} != APP_NAME={settings.APP_NAME!r}"
 
 
 # ---------------------------------------------------------------------------
 # 4. SECURITY.md control-to-test mapping
 # ---------------------------------------------------------------------------
+
 
 class TestSecurityControlMapping:
     """Every control listed in SECURITY.md must map to an existing test function."""

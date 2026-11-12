@@ -15,23 +15,23 @@ Validates all Critical, High, and Medium security fixes:
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from app import app
+from custom_weather_mcp_server import _request_json
+from tripmate.agents.guardrail import (
+    UNTRUSTED_TOOL_DELIMITER_END,
+    UNTRUSTED_TOOL_DELIMITER_START,
+    UNTRUSTED_USER_DELIMITER_END,
+    UNTRUSTED_USER_DELIMITER_START,
+    strip_delimiter_tags,
+    wrap_untrusted_tool_data,
+    wrap_untrusted_user_input,
+)
 from tripmate.config.settings import settings
 from tripmate.database.store import store
-from tripmate.agents.guardrail import (
-    strip_delimiter_tags,
-    wrap_untrusted_user_input,
-    wrap_untrusted_tool_data,
-    UNTRUSTED_USER_DELIMITER_START,
-    UNTRUSTED_USER_DELIMITER_END,
-    UNTRUSTED_TOOL_DELIMITER_START,
-    UNTRUSTED_TOOL_DELIMITER_END,
-)
+from tripmate.middleware import SlidingWindowRateLimiter
 from tripmate.services.auth_service import auth_service
-from tripmate.middleware import SlidingWindowRateLimiter, RequestBodyLimitMiddleware
-from custom_weather_mcp_server import _request_json
 
 
 @pytest.mark.asyncio
@@ -42,11 +42,15 @@ async def test_authentication_required_on_all_travel_routes(monkeypatch):
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Legacy endpoints
-        resp1 = await client.post("/api/travel", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.1"})
+        resp1 = await client.post(
+            "/api/travel", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.1"}
+        )
         assert resp1.status_code == 401
         assert resp1.json()["error"]["code"] == "UNAUTHORIZED"
 
-        resp2 = await client.post("/api/travel/stream", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.2"})
+        resp2 = await client.post(
+            "/api/travel/stream", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.2"}
+        )
         assert resp2.status_code == 401
 
         resp3 = await client.post(
@@ -57,10 +61,14 @@ async def test_authentication_required_on_all_travel_routes(monkeypatch):
         assert resp3.status_code == 401
 
         # V1 endpoints
-        resp4 = await client.post("/api/v1/travel", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.4"})
+        resp4 = await client.post(
+            "/api/v1/travel", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.4"}
+        )
         assert resp4.status_code == 401
 
-        resp5 = await client.post("/api/v1/travel/stream", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.5"})
+        resp5 = await client.post(
+            "/api/v1/travel/stream", json={"message": "Visit Tokyo"}, headers={"X-Forwarded-For": "10.10.1.5"}
+        )
         assert resp5.status_code == 401
 
         resp6 = await client.post(
@@ -183,7 +191,7 @@ def test_prompt_injection_delimiter_stripping():
     assert wrapped_user.startswith(UNTRUSTED_USER_DELIMITER_START)
     assert wrapped_user.endswith(UNTRUSTED_USER_DELIMITER_END)
     # The payload inside must not contain inner delimiter tags
-    inner_body = wrapped_user[len(UNTRUSTED_USER_DELIMITER_START):-len(UNTRUSTED_USER_DELIMITER_END)]
+    inner_body = wrapped_user[len(UNTRUSTED_USER_DELIMITER_START) : -len(UNTRUSTED_USER_DELIMITER_END)]
     assert UNTRUSTED_USER_DELIMITER_START not in inner_body
     assert UNTRUSTED_USER_DELIMITER_END not in inner_body
 
@@ -200,8 +208,6 @@ def test_prompt_injection_delimiter_stripping():
 async def test_rate_limiter_returns_429_on_breach():
     """Verifies that SlidingWindowRateLimiter returns HTTP 429 when limit is exceeded."""
     from fastapi import FastAPI
-    from starlette.requests import Request
-    from starlette.responses import JSONResponse
 
     test_app = FastAPI()
     limiter = SlidingWindowRateLimiter(test_app, max_requests=2, window_seconds=60, protected_prefixes=("/api/",))
@@ -225,6 +231,7 @@ async def test_rate_limiter_returns_429_on_breach():
 async def test_redis_down_emergency_cap_on_llm_routes(monkeypatch):
     """Verifies fail-closed behavior with emergency in-memory cap on LLM routes when Redis is down."""
     from fastapi import FastAPI
+
     test_app = FastAPI()
     limiter = SlidingWindowRateLimiter(test_app, max_requests=30, window_seconds=60, protected_prefixes=("/api/",))
 

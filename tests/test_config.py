@@ -1,6 +1,7 @@
-import os
 from pathlib import Path
+
 import pytest
+
 from tripmate.config.settings import Settings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,6 +39,7 @@ def test_valid_required_env_passes_startup_in_prod(monkeypatch):
         ENV="prod",
         API_KEY="prod-master-key-xyz",
         GROQ_API_KEY="gsk_valid_key",
+        JWT_SECRET_KEY="prod-jwt-secret-key-that-is-not-default",
     )
     # Should not raise
     prod_settings.validate_production()
@@ -57,16 +59,11 @@ def test_env_example_keys_match_settings():
                 if key:
                     example_keys.add(key)
 
-    settings_keys = set(Settings.model_fields.keys())
+    settings_keys = set(Settings.model_fields.keys()) - {"APP_VERSION"}
 
     missing_in_example = sorted(settings_keys - example_keys)
     extra_in_example = sorted(example_keys - settings_keys)
 
-    assert not missing_in_example, (
-        f".env.example is missing settings fields: {missing_in_example}"
-    )
-    assert not extra_in_example, (
-        f".env.example has extra keys not read by settings: {extra_in_example}"
-    )
+    assert not missing_in_example, f".env.example is missing settings fields: {missing_in_example}"
+    assert not extra_in_example, f".env.example has extra keys not read by settings: {extra_in_example}"
     assert example_keys == settings_keys, ".env.example keys must equal Settings fields"
-

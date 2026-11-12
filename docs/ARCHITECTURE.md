@@ -108,22 +108,15 @@ flowchart TD
 
 ---
 
-## Design Patterns
+## Core Design & Architecture Principles
 
-Ten patterns are applied throughout the codebase:
+The codebase emphasizes lean, maintainable, production-ready engineering:
 
-| # | Pattern | Key Files |
-|---|---------|-----------|
-| 1 | Repository | [`tripmate/repositories/`](../tripmate/repositories/) |
-| 2 | Factory | [`tripmate/factories/`](../tripmate/factories/) |
-| 3 | Singleton | [`tripmate/core/singleton.py`](../tripmate/core/singleton.py) |
-| 4 | Strategy | [`tripmate/strategies/`](../tripmate/strategies/) |
-| 5 | Observer (pub/sub) | [`tripmate/events/`](../tripmate/events/) |
-| 6 | Builder | [`tripmate/builders/`](../tripmate/builders/) |
-| 7 | Adapter | [`tripmate/adapters/`](../tripmate/adapters/) |
-| 8 | Circuit Breaker | [`tripmate/integrations/circuit_breaker.py`](../tripmate/integrations/) |
-| 9 | Command / Query Bus | [`tripmate/core/`](../tripmate/core/) |
-| 10 | State Machine | [`tripmate/graph/workflow.py`](../tripmate/graph/workflow.py) |
+- **State Machine**: LangGraph `StateGraph` in [`tripmate/graph/workflow.py`](../tripmate/graph/workflow.py) coordinates multi-agent routing.
+- **Provider Strategy**: Dynamic LLM routing with fallback in [`tripmate/strategies/llm_strategies.py`](../tripmate/strategies/).
+- **Resilience**: Circuit breakers in [`tripmate/integrations/circuit_breaker.py`](../tripmate/integrations/).
+- **Data Adapters**: Output normalization in [`tripmate/adapters/`](../tripmate/adapters/).
+- **Singleton Resources**: Process-safe singletons via [`tripmate/core/singleton.py`](../tripmate/core/singleton.py).
 
 ---
 

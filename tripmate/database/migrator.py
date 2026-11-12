@@ -4,9 +4,9 @@ Alembic Programmatic Migration Helper & Runner
 Allows running database migrations programmatically during startup or via CLI scripts.
 """
 
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 from alembic import command
 from alembic.config import Config
 
@@ -22,13 +22,13 @@ def get_alembic_config(db_url: Optional[str] = None) -> Config:
     """Constructs an Alembic Config object with absolute script and config paths."""
     config = Config(str(ALEMBIC_INI_PATH))
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
-    
+
     url = db_url or get_formatted_db_url() or settings.DATABASE_URL
     if url:
         if url.startswith("postgres://"):
-            url = "postgresql+psycopg://" + url[len("postgres://"):]
+            url = "postgresql+psycopg://" + url[len("postgres://") :]
         elif url.startswith("postgresql://") and not url.startswith("postgresql+"):
-            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+            url = "postgresql+psycopg://" + url[len("postgresql://") :]
         config.set_main_option("sqlalchemy.url", url)
     return config
 
@@ -74,7 +74,4 @@ def get_migration_history() -> List[str]:
     versions_dir = MIGRATIONS_DIR / "versions"
     if not versions_dir.exists():
         return []
-    return [
-        f.stem for f in versions_dir.glob("*.py")
-        if not f.name.startswith("__")
-    ]
+    return [f.stem for f in versions_dir.glob("*.py") if not f.name.startswith("__")]

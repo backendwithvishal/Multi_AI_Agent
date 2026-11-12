@@ -4,6 +4,7 @@ CQRS Pattern Module
 Exposes commands, queries, handlers, and dispatch buses.
 """
 
+from tripmate.cqrs.bus import CommandBus, QueryBus, command_bus, query_bus
 from tripmate.cqrs.commands import (
     CreateAlertCommand,
     CreateAssetCommand,
@@ -15,15 +16,6 @@ from tripmate.cqrs.commands import (
     MarkAlertReadCommand,
     ResumeTravelPlanCommand,
 )
-from tripmate.cqrs.queries import (
-    GetAssetQuery,
-    GetRunDetailsQuery,
-    GetRunMetricsQuery,
-    GetWatchlistQuery,
-    ListAlertsQuery,
-    ListAssetsQuery,
-    ListWatchlistsQuery,
-)
 from tripmate.cqrs.handlers import (
     AlertCommandHandlers,
     AlertQueryHandlers,
@@ -33,7 +25,15 @@ from tripmate.cqrs.handlers import (
     WatchlistCommandHandlers,
     WatchlistQueryHandlers,
 )
-from tripmate.cqrs.bus import CommandBus, QueryBus, command_bus, query_bus
+from tripmate.cqrs.queries import (
+    GetAssetQuery,
+    GetRunDetailsQuery,
+    GetRunMetricsQuery,
+    GetWatchlistQuery,
+    ListAlertsQuery,
+    ListAssetsQuery,
+    ListWatchlistsQuery,
+)
 
 __all__ = [
     "CreateWatchlistCommand",

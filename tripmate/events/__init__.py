@@ -4,6 +4,11 @@ Observer Pattern Module
 Exposes events, dispatchers, and subscribers.
 """
 
+from tripmate.events.dispatcher import (
+    IWorkflowEventSubscriber,
+    WorkflowEventDispatcher,
+    workflow_dispatcher,
+)
 from tripmate.events.events import (
     ApprovalRequiredEvent,
     CriticCompletedEvent,
@@ -14,11 +19,6 @@ from tripmate.events.events import (
     WorkflowEvent,
     WorkflowFailedEvent,
     WorkflowStartedEvent,
-)
-from tripmate.events.dispatcher import (
-    IWorkflowEventSubscriber,
-    WorkflowEventDispatcher,
-    workflow_dispatcher,
 )
 from tripmate.events.subscribers import (
     AuditLogSubscriber,

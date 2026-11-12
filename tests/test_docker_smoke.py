@@ -2,6 +2,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+
 import pytest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -33,10 +34,9 @@ def test_dockerfile_best_practices():
     assert len(stages) >= 2, "Dockerfile must be multi-stage (e.g. builder, runner)"
 
     # Official uv image binary copy
-    assert re.search(r"COPY\s+--from=ghcr\.io/astral-sh/uv:[^\s]+.*\/uv.*\/usr\/local\/bin", content) or \
-           re.search(r"COPY\s+--from=.*uv.*\/uv", content), (
-        "Dockerfile must copy pinned uv/uvx binary from official image"
-    )
+    assert re.search(r"COPY\s+--from=ghcr\.io/astral-sh/uv:[^\s]+.*\/uv.*\/usr\/local\/bin", content) or re.search(
+        r"COPY\s+--from=.*uv.*\/uv", content
+    ), "Dockerfile must copy pinned uv/uvx binary from official image"
 
     # Pre-cache MCP package at build time
     assert "aviationstack-mcp" in content, "Dockerfile must pre-cache aviationstack-mcp at build time"
@@ -60,9 +60,9 @@ def test_dockerfile_best_practices():
     )
 
     # Healthcheck via Python probing /health/live
-    assert 'HEALTHCHECK' in content, "Dockerfile must define a HEALTHCHECK"
-    assert 'python -c' in content or 'python3 -c' in content, "HEALTHCHECK must use Python rather than curl"
-    assert '/health/live' in content, "Docker HEALTHCHECK must probe /health/live"
+    assert "HEALTHCHECK" in content, "Dockerfile must define a HEALTHCHECK"
+    assert "python -c" in content or "python3 -c" in content, "HEALTHCHECK must use Python rather than curl"
+    assert "/health/live" in content, "Docker HEALTHCHECK must probe /health/live"
 
 
 def test_compose_configs_hardening():

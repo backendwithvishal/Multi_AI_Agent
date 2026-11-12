@@ -12,11 +12,12 @@ Checks:
 import json
 import logging
 from typing import Any, Dict
-from langchain_core.messages import SystemMessage, HumanMessage
 
-from tripmate.schemas.agents import CriticReport
+from langchain_core.messages import HumanMessage, SystemMessage
+
 from tripmate.config.settings import settings
 from tripmate.integrations.llm_resilience import invoke_llm_with_resilience
+from tripmate.schemas.agents import CriticReport
 
 logger = logging.getLogger("tripmate.critic")
 
@@ -76,7 +77,9 @@ Return strict JSON matching this schema:
             response = await invoke_llm_with_resilience(
                 llm,
                 [
-                    SystemMessage(content="You validate multi-agent outputs for accuracy and safety. Return strict JSON only."),
+                    SystemMessage(
+                        content="You validate multi-agent outputs for accuracy and safety. Return strict JSON only."
+                    ),
                     HumanMessage(content=prompt),
                 ],
                 timeout=settings.LLM_TIMEOUT_SECONDS,
@@ -90,7 +93,7 @@ Return strict JSON matching this schema:
             start = cleaned.find("{")
             end = cleaned.rfind("}")
             if start != -1 and end != -1:
-                data = json.loads(cleaned[start:end+1])
+                data = json.loads(cleaned[start : end + 1])
                 return CriticReport(**data)
         except Exception as exc:
             logger.warning(f"Critic evaluation fallback: {exc}")

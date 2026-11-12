@@ -10,7 +10,7 @@ Provides decoupled event listeners for:
 import asyncio
 import json
 import logging
-from typing import Optional
+
 from tripmate.events.dispatcher import IWorkflowEventSubscriber
 from tripmate.events.events import (
     ApprovalRequiredEvent,
@@ -31,9 +31,7 @@ class AuditLogSubscriber(IWorkflowEventSubscriber):
     """Subscribes to workflow events and produces structured audit log records."""
 
     async def on_event(self, event: WorkflowEvent) -> None:
-        logger.info(
-            f"[AUDIT EVENT] type={event.event_type} thread_id={event.thread_id} run_id={event.run_id}"
-        )
+        logger.info(f"[AUDIT EVENT] type={event.event_type} thread_id={event.thread_id} run_id={event.run_id}")
 
 
 class MetricsCollectorSubscriber(IWorkflowEventSubscriber):
@@ -42,6 +40,7 @@ class MetricsCollectorSubscriber(IWorkflowEventSubscriber):
     async def on_event(self, event: WorkflowEvent) -> None:
         try:
             from tripmate.middleware.metrics import metrics_registry
+
             if isinstance(event, WorkflowCompletedEvent):
                 metrics_registry.record_agent_execution("workflow", "success", 0.0)
             elif isinstance(event, WorkflowFailedEvent):

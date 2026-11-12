@@ -1,6 +1,5 @@
-import pytest
 from starlette.requests import Request
-from starlette.datastructures import Headers
+
 from tripmate.config.settings import settings
 from tripmate.middleware import SlidingWindowRateLimiter
 
@@ -26,10 +25,7 @@ def test_client_ip_from_trusted_proxy(monkeypatch):
     monkeypatch.setattr(settings, "TRUSTED_PROXIES", ["10.0.0.1", "127.0.0.1"])
     limiter = SlidingWindowRateLimiter(app=None)
 
-    req = create_mock_request(
-        client_ip="10.0.0.1",
-        headers_dict={"X-Forwarded-For": "203.0.113.195"}
-    )
+    req = create_mock_request(client_ip="10.0.0.1", headers_dict={"X-Forwarded-For": "203.0.113.195"})
     extracted_ip = limiter._get_client_ip(req)
     assert extracted_ip == "203.0.113.195"
 
@@ -40,10 +36,7 @@ def test_client_ip_ignored_from_untrusted_proxy(monkeypatch):
     limiter = SlidingWindowRateLimiter(app=None)
 
     # Peer 198.51.100.22 is NOT trusted
-    req = create_mock_request(
-        client_ip="198.51.100.22",
-        headers_dict={"X-Forwarded-For": "203.0.113.195"}
-    )
+    req = create_mock_request(client_ip="198.51.100.22", headers_dict={"X-Forwarded-For": "203.0.113.195"})
     extracted_ip = limiter._get_client_ip(req)
     assert extracted_ip == "198.51.100.22", "Untrusted proxy must not be allowed to spoof client IP"
 
@@ -53,10 +46,6 @@ def test_multi_hop_x_forwarded_for_from_trusted_proxy(monkeypatch):
     monkeypatch.setattr(settings, "TRUSTED_PROXIES", ["10.0.0.1"])
     limiter = SlidingWindowRateLimiter(app=None)
 
-    req = create_mock_request(
-        client_ip="10.0.0.1",
-        headers_dict={"X-Forwarded-For": "203.0.113.195, 10.0.0.2"}
-    )
+    req = create_mock_request(client_ip="10.0.0.1", headers_dict={"X-Forwarded-For": "203.0.113.195, 10.0.0.2"})
     extracted_ip = limiter._get_client_ip(req)
     assert extracted_ip == "203.0.113.195"
-

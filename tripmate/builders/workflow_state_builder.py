@@ -9,7 +9,9 @@ guarantees all mandatory keys and default states are consistently initialized.
 import time
 import uuid
 from typing import Any, Dict, List, Optional
-from langchain_core.messages import HumanMessage, BaseMessage
+
+from langchain_core.messages import BaseMessage, HumanMessage
+
 from tripmate.graph.state import TravelState
 
 

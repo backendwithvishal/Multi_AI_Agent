@@ -11,7 +11,6 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
-from dotenv import load_dotenv
 
 from tripmate.config.settings import settings
 
@@ -29,6 +28,7 @@ def create_openai_compatible_client(model_name: str, api_key: str, base_url: str
     """Helper creating an OpenAI-compatible REST API client for OpenRouter and Hugging Face."""
     try:
         from langchain_groq import ChatGroq
+
         return ChatGroq(
             model=model_name,
             api_key=api_key,
@@ -40,6 +40,7 @@ def create_openai_compatible_client(model_name: str, api_key: str, base_url: str
 
     try:
         from langchain_community.chat_models import ChatOpenAI
+
         return ChatOpenAI(
             model_name=model_name,
             openai_api_key=api_key,
@@ -108,6 +109,7 @@ class GroqProviderStrategy(LLMProviderStrategy):
 
         try:
             from langchain_groq import ChatGroq
+
             return ChatGroq(
                 model=model_name,
                 api_key=api_key,
@@ -178,10 +180,7 @@ class HuggingFaceProviderStrategy(LLMProviderStrategy):
     @property
     def api_key(self) -> Optional[str]:
         return (
-            settings.HUGGINGFACE_API_KEY
-            or os.getenv("HUGGINGFACE_API_KEY")
-            or os.getenv("HUGGING_FACE_API_KEY")
-            or ""
+            settings.HUGGINGFACE_API_KEY or os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HUGGING_FACE_API_KEY") or ""
         ).strip() or None
 
     def is_configured(self) -> bool:

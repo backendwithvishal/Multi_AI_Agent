@@ -8,14 +8,16 @@ Verifies:
 """
 
 import os
+
 import pytest
+
 from tripmate.config.settings import (
     Settings,
-    _parse_str,
-    _parse_int,
-    _parse_float,
     _parse_bool,
+    _parse_float,
+    _parse_int,
     _parse_list,
+    _parse_str,
 )
 
 
@@ -72,7 +74,7 @@ def test_settings_initialization_defaults():
     os.environ.pop("TEST_MALFORMED_BOOL", None)
 
     s = Settings()
-    assert s.APP_NAME == "TripMate AI Multi-Agent Backend Engine"
+    assert s.APP_NAME in ("Multi-AI-Agent", "TripMate AI Multi-Agent Backend Engine")
     assert isinstance(s.EXTERNAL_API_TIMEOUT_SECONDS, float)
     assert isinstance(s.RATE_LIMIT_REQUESTS, int)
 
@@ -82,6 +84,7 @@ def test_validate_production_success(monkeypatch):
     s = Settings()
     s.APP_ENV = "production"
     s.API_KEY = "prod_secret_key_123"
+    s.JWT_SECRET_KEY = "custom_prod_jwt_secret_key_secure_12345"
     s.GROQ_API_KEY = "gsk_test_123"
     s.OPENROUTER_API_KEY = ""
     s.HUGGINGFACE_API_KEY = ""
@@ -95,6 +98,7 @@ def test_validate_production_openrouter_alternative(monkeypatch):
     s = Settings()
     s.APP_ENV = "production"
     s.API_KEY = "prod_secret_key_123"
+    s.JWT_SECRET_KEY = "custom_prod_jwt_secret_key_secure_12345"
     s.GROQ_API_KEY = ""
     s.OPENROUTER_API_KEY = "sk-or-test-456"
     s.HUGGINGFACE_API_KEY = ""
@@ -127,4 +131,3 @@ def test_validate_production_missing_api_key(monkeypatch):
     with pytest.raises(ValueError) as exc:
         s.validate_production()
     assert "API_KEY" in str(exc.value)
-

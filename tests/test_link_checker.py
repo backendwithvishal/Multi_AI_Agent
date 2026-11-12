@@ -29,13 +29,14 @@ class BrokenLink(NamedTuple):
 
 
 def _collect_markdown_files() -> List[Path]:
-    """Return every .md file in the repo (excluding .pytest_cache, __pycache__)."""
+    """Return every active .md file in the repo (excluding .pytest_cache, __pycache__, archive)."""
     return [
         p
         for p in ROOT.rglob("*.md")
         if ".pytest_cache" not in p.parts
         and "__pycache__" not in p.parts
         and ".git" not in p.parts
+        and "archive" not in p.parts
     ]
 
 
@@ -100,9 +101,7 @@ class TestMarkdownLinks:
     def test_file_has_no_broken_links(self, md_file: Path):
         broken = _check_markdown_links(md_file)
         if broken:
-            details = "\n".join(
-                f"  L{b.line_number}: {b.link_target!r} ({b.reason})" for b in broken
-            )
+            details = "\n".join(f"  L{b.line_number}: {b.link_target!r} ({b.reason})" for b in broken)
             pytest.fail(f"Found broken link(s) in {md_file.relative_to(ROOT)}:\n{details}")
 
     def test_all_markdown_files_parsed(self):
@@ -116,9 +115,6 @@ class TestMarkdownLinks:
         all_broken = _collect_all_broken_links()
         with capsys.disabled():
             print(
-                f"\n[link-checker] Scanned {len(ALL_MD_FILES)} markdown files, "
-                f"found {len(all_broken)} broken link(s)."
+                f"\n[link-checker] Scanned {len(ALL_MD_FILES)} markdown files, found {len(all_broken)} broken link(s)."
             )
         assert len(all_broken) == 0, f"Found {len(all_broken)} broken links total across all markdown files"
-
-

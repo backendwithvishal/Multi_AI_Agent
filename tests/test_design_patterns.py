@@ -15,30 +15,58 @@ Comprehensive Test Suite for 10 Software Design Patterns & Architectural Concept
 import asyncio
 import threading
 import time
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
+from tripmate.adapters.flight_adapter import FlightServiceAdapter
+from tripmate.adapters.tavily_adapter import TavilySearchAdapter
+from tripmate.adapters.weather_adapter import WeatherServiceAdapter
+from tripmate.builders.response_builder import TravelPlanResponseBuilder
+from tripmate.builders.workflow_state_builder import TravelWorkflowStateBuilder
+
 # Core & Patterns
-from tripmate.core.decorators import circuit_protected, retry_async, timed_async
+from tripmate.core.decorators import retry_async, timed_async
 from tripmate.core.singleton import SingletonMeta
+from tripmate.cqrs.bus import CommandBus, QueryBus
+from tripmate.cqrs.commands import (
+    CreateWatchlistCommand,
+    DeleteWatchlistCommand,
+)
+from tripmate.cqrs.handlers import (
+    WatchlistCommandHandlers,
+    WatchlistQueryHandlers,
+)
+from tripmate.cqrs.queries import (
+    GetWatchlistQuery,
+)
+from tripmate.events.dispatcher import IWorkflowEventSubscriber, WorkflowEventDispatcher
+from tripmate.events.events import (
+    SupervisorCompletedEvent,
+    WorkflowEvent,
+    WorkflowStartedEvent,
+)
+from tripmate.events.subscribers import SSEEventBridgeSubscriber
+from tripmate.factories.agent_factory import AgentFactory
+from tripmate.factories.llm_factory import LLMClientFactory
+from tripmate.integrations.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerOpenException,
+    CircuitBreakerRegistry,
+    CircuitState,
+)
 from tripmate.repositories.interfaces import IWatchlistRepository
 from tripmate.repositories.store_repositories import (
-    StoreAlertRepository,
-    StoreAssetRepository,
-    StoreBookingRepository,
-    StoreThreadOwnerRepository,
-    StoreUserRepository,
-    StoreWatchlistRepository,
-    alert_repository,
-    asset_repository,
-    booking_repository,
     user_repository,
     watchlist_repository,
 )
-from tripmate.factories.agent_factory import AgentFactory
-from tripmate.factories.llm_factory import LLMClientFactory
+from tripmate.schemas import WatchlistCreateRequest
+from tripmate.services.model_router import ModelRouter
+from tripmate.services.watchlist_service import WatchlistService
+from tripmate.strategies.booking_strategies import (
+    AmadeusSandboxFlightStrategy,
+    AmadeusSandboxHotelStrategy,
+)
 from tripmate.strategies.llm_strategies import (
     GroqProviderStrategy,
     HuggingFaceProviderStrategy,
@@ -46,57 +74,11 @@ from tripmate.strategies.llm_strategies import (
     ModelTier,
     OpenRouterProviderStrategy,
 )
-from tripmate.strategies.booking_strategies import (
-    AmadeusSandboxFlightStrategy,
-    AmadeusSandboxHotelStrategy,
-)
-from tripmate.events.events import (
-    ApprovalRequiredEvent,
-    CriticCompletedEvent,
-    SupervisorCompletedEvent,
-    WorkflowCompletedEvent,
-    WorkflowEvent,
-    WorkflowStartedEvent,
-)
-from tripmate.events.dispatcher import IWorkflowEventSubscriber, WorkflowEventDispatcher
-from tripmate.events.subscribers import SSEEventBridgeSubscriber
-from tripmate.builders.workflow_state_builder import TravelWorkflowStateBuilder
-from tripmate.builders.response_builder import TravelPlanResponseBuilder
-from tripmate.adapters.weather_adapter import WeatherServiceAdapter
-from tripmate.adapters.flight_adapter import FlightServiceAdapter
-from tripmate.adapters.tavily_adapter import TavilySearchAdapter
-from tripmate.cqrs.commands import (
-    CreateAlertCommand,
-    CreateAssetCommand,
-    CreateWatchlistCommand,
-    DeleteWatchlistCommand,
-)
-from tripmate.cqrs.queries import (
-    GetWatchlistQuery,
-    ListAlertsQuery,
-    ListWatchlistsQuery,
-)
-from tripmate.cqrs.handlers import (
-    AlertCommandHandlers,
-    AlertQueryHandlers,
-    WatchlistCommandHandlers,
-    WatchlistQueryHandlers,
-)
-from tripmate.cqrs.bus import CommandBus, QueryBus
-from tripmate.integrations.circuit_breaker import (
-    CircuitBreaker,
-    CircuitBreakerOpenException,
-    CircuitBreakerRegistry,
-    CircuitState,
-)
-from tripmate.services.watchlist_service import WatchlistService
-from tripmate.services.model_router import ModelRouter
-from tripmate.schemas import WatchlistCreateRequest
-
 
 # =========================================================
 # 1. Repository Pattern Tests
 # =========================================================
+
 
 def test_repository_pattern_crud_operations():
     """Tests concrete repository data access and persistence logic."""
@@ -129,6 +111,7 @@ def test_repository_pattern_crud_operations():
 
 def test_repository_mock_injection():
     """Verifies that services accept mock repositories for isolated unit testing."""
+
     class FakeWatchlistRepository(IWatchlistRepository):
         def __init__(self):
             self.items = {}
@@ -178,6 +161,7 @@ def test_repository_mock_injection():
 # 2. Factory Pattern Tests
 # =========================================================
 
+
 def test_agent_factory_creation():
     """Tests AgentFactory dynamic instantiation and metadata registration."""
     agent_names = ["flight_agent", "hotel_agent", "weather_agent", "budget_agent", "itinerary_agent"]
@@ -204,8 +188,10 @@ def test_llm_client_factory_validation():
 # 3. Singleton Pattern Tests
 # =========================================================
 
+
 def test_singleton_thread_safety_and_identity():
     """Tests SingletonMeta guarantees single instance across multiple threads."""
+
     class ExpensiveConnectionPool(metaclass=SingletonMeta):
         def __init__(self):
             self.created_at = time.time()
@@ -237,6 +223,7 @@ def test_singleton_thread_safety_and_identity():
 # 4. Strategy Pattern Tests
 # =========================================================
 
+
 def test_llm_provider_strategies():
     """Tests individual LLM provider strategies and ranking."""
     groq = GroqProviderStrategy()
@@ -252,6 +239,7 @@ def test_llm_provider_strategies():
 
 def test_model_router_strategy_delegation():
     """Tests ModelRouter delegates execution to configured strategies."""
+
     class MockCustomStrategy(LLMProviderStrategy):
         @property
         def provider_name(self) -> str:
@@ -294,6 +282,7 @@ async def test_booking_search_strategies():
 # =========================================================
 # 5. Observer Pattern Tests
 # =========================================================
+
 
 @pytest.mark.asyncio
 async def test_observer_event_dispatching():
@@ -359,6 +348,7 @@ async def test_sse_bridge_subscriber():
 # 6. Builder Pattern Tests
 # =========================================================
 
+
 def test_travel_workflow_state_builder():
     """Tests TravelWorkflowStateBuilder validation, defaults, and construction."""
     builder = TravelWorkflowStateBuilder()
@@ -408,6 +398,7 @@ def test_travel_plan_response_builder():
 # =========================================================
 # 7. Adapter Pattern Tests
 # =========================================================
+
 
 def test_weather_service_adapter():
     """Tests WeatherServiceAdapter parsing and EvidenceItem generation."""
@@ -460,6 +451,7 @@ def test_tavily_search_adapter():
 # =========================================================
 # 8. Decorator Pattern Tests
 # =========================================================
+
 
 @pytest.mark.asyncio
 async def test_timed_async_decorator():
@@ -518,6 +510,7 @@ async def test_retry_async_decorator_permanent_error():
 # 9. CQRS Pattern Tests
 # =========================================================
 
+
 def test_cqrs_command_query_separation():
     """Tests CQRS separation: commands mutate state, queries strictly read without side effects."""
     cmd_handlers = WatchlistCommandHandlers(watchlist_repository)
@@ -559,7 +552,9 @@ def test_command_and_query_buses():
     bus_cmd.register(CreateWatchlistCommand, lambda c: {"dispatched_cmd": c.title})
     bus_query.register(GetWatchlistQuery, lambda q: {"dispatched_query": q.item_id})
 
-    res_cmd = bus_cmd.execute(CreateWatchlistCommand(user_id="u1", title="Trip A", target_type="city", target_value="A"))
+    res_cmd = bus_cmd.execute(
+        CreateWatchlistCommand(user_id="u1", title="Trip A", target_type="city", target_value="A")
+    )
     assert res_cmd == {"dispatched_cmd": "Trip A"}
 
     res_query = bus_query.execute(GetWatchlistQuery(item_id="item_99", user_id="u1"))
@@ -569,6 +564,7 @@ def test_command_and_query_buses():
 # =========================================================
 # 10. Circuit Breaker Pattern Tests
 # =========================================================
+
 
 @pytest.mark.asyncio
 async def test_circuit_breaker_transient_vs_permanent():

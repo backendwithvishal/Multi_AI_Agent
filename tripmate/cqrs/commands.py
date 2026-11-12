@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 @dataclass(frozen=True)
 class CreateWatchlistCommand:
     """Command to create a travel price watchlist."""
+
     user_id: str
     title: str
     target_type: str
@@ -22,6 +23,7 @@ class CreateWatchlistCommand:
 @dataclass(frozen=True)
 class DeleteWatchlistCommand:
     """Command to delete an existing watchlist."""
+
     item_id: str
     user_id: str
 
@@ -29,6 +31,7 @@ class DeleteWatchlistCommand:
 @dataclass(frozen=True)
 class CreateAlertCommand:
     """Command to create a new notification alert."""
+
     user_id: str
     title: str
     message: str
@@ -40,6 +43,7 @@ class CreateAlertCommand:
 @dataclass(frozen=True)
 class MarkAlertReadCommand:
     """Command to mark an alert as read."""
+
     alert_id: str
     user_id: str
 
@@ -47,6 +51,7 @@ class MarkAlertReadCommand:
 @dataclass(frozen=True)
 class DeleteAlertCommand:
     """Command to delete an alert."""
+
     alert_id: str
     user_id: str
 
@@ -54,6 +59,7 @@ class DeleteAlertCommand:
 @dataclass(frozen=True)
 class CreateAssetCommand:
     """Command to create a travel asset or document."""
+
     user_id: str
     name: str
     asset_type: str
@@ -65,6 +71,7 @@ class CreateAssetCommand:
 @dataclass(frozen=True)
 class DeleteAssetCommand:
     """Command to delete a travel asset."""
+
     asset_id: str
     user_id: str
 
@@ -72,6 +79,7 @@ class DeleteAssetCommand:
 @dataclass(frozen=True)
 class ExecuteTravelPlanCommand:
     """Command to start a multi-agent travel planning execution."""
+
     user_input: str
     thread_id: Optional[str] = None
     user_id: Optional[str] = None
@@ -80,6 +88,7 @@ class ExecuteTravelPlanCommand:
 @dataclass(frozen=True)
 class ResumeTravelPlanCommand:
     """Command to resume a paused HITL workflow."""
+
     thread_id: str
     approved: bool
     feedback: str = ""

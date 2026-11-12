@@ -9,6 +9,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Set
+
 from tripmate.core.singleton import SingletonMeta
 from tripmate.events.events import WorkflowEvent
 
