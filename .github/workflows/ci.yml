@@ -1,10 +1,11 @@
-name: CI Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -76,3 +77,28 @@ jobs:
           echo "Readiness HTTP status: $STATUS"
           [ "$STATUS" = "503" ] || [ "$STATUS" = "200" ]
           docker stop test_app && docker rm test_app
+
+  deploy:
+    name: Trigger Render Deployment
+    needs: [test, docker-build]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render Deploy Webhook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "Triggering Render deploy hook..."
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$RENDER_DEPLOY_HOOK_URL")
+            echo "Render deploy hook returned HTTP status: $HTTP_STATUS"
+            if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+              echo "Deployment triggered successfully on Render."
+            else
+              echo "Deploy hook request failed with status: $HTTP_STATUS"
+              exit 1
+            fi
+          else
+            echo "RENDER_DEPLOY_HOOK_URL secret not defined. Skipping explicit webhook trigger."
+            echo "Render will auto-deploy via GitHub integration if Auto-Deploy is enabled in Render settings."
+          fi

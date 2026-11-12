@@ -196,11 +196,15 @@ sudo systemctl reload caddy
    - Readiness Probe Path: `/health/ready`
 
 ### Option B: Render
-1. Create a **Web Service** pointing to the repository.
-2. Runtime: **Docker** (Render automatically picks up `Dockerfile`).
-3. Create managed **Render PostgreSQL** and **Render Redis** instances.
-4. Set Environment Variables (`DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `API_KEY`).
-5. Set Health Check Path to `/health/live`.
+1. Create a **Web Service** pointing to the repository (`backendwithvishal/Multi_AI_Agent`).
+2. Set branch to `main` (Render tracks `main` branch by default).
+3. Runtime: **Docker** (Render automatically picks up `Dockerfile` and `render.yaml`).
+4. Create managed **Render PostgreSQL** and **Render Redis** instances.
+5. Set Environment Variables (`DATABASE_URL`, `REDIS_URL`, `SECRET_KEY`, `API_KEY`, etc.).
+6. Set Health Check Path to `/health/live`.
+7. **Continuous Deployment (Auto-Deploy vs Webhook)**:
+   - **Auto-Deploy**: Enabled by default in `render.yaml` (`autoDeploy: true`) and in the Render Dashboard (under **Settings** > **Auto-Deploy** > **Yes**). Render automatically rebuilds whenever code is pushed to `main`.
+   - **GitHub Actions CD (Recommended)**: Copy the **Deploy Hook URL** from your Render service settings (**Settings** > **Deploy Hook** > `https://api.render.com/deploy/srv-xxxxxx?key=yyyyyy`). Add it to your GitHub Repository Secrets as `RENDER_DEPLOY_HOOK_URL`. GitHub Actions will automatically trigger Render to deploy immediately after all CI tests and Docker builds succeed!
 
 ### Option C: Fly.io
 1. Initialize configuration: `fly launch --no-deploy`.
