@@ -25,8 +25,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt || true
+          pip install -r requirements.lock
+          pip install -r requirements-dev.txt
 
       - name: Verify Image & Registry Pins
         run: |
@@ -37,7 +37,13 @@ jobs:
           APP_ENV: test
           SKIP_DOCKER_SMOKE_IN_PYTEST: "true"
         run: |
-          python -m pytest -v
+          python -m pytest -v --tb=short 2>&1 | tee pytest_output.txt || {
+            echo "### Pytest Failures" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 pytest_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
 
   docker-build:
     name: Verify Docker Build & Smoke Test
