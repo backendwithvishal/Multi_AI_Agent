@@ -372,9 +372,13 @@ def initialize_checkpointer():
             logger.warning(f"PostgreSQL connection failed ({exc}). Falling back to MemorySaver for development.")
 
     if not is_dev:
-        raise RuntimeError(
-            "Production startup failed: DATABASE_URL not configured. "
-            "PostgreSQL checkpointer is strictly required in production (MemorySaver only permitted when ENV=dev)."
+        if db_url:
+            raise RuntimeError(
+                "Production startup failed: PostgreSQL checkpointer initialization failed."
+            )
+        logger.warning(
+            "DATABASE_URL not configured in production mode. "
+            "Falling back to MemorySaver (thread state will not persist across container restarts)."
         )
 
     return MemorySaver() if MemorySaver else None

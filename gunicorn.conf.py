@@ -9,8 +9,8 @@ from tripmate.config.settings import settings
 bind = f"0.0.0.0:{os.getenv('PORT', '8000')}"
 
 # Worker processes and concurrency
-# Default to WEB_CONCURRENCY, WORKERS, or (2 * CPU) + 1
-default_workers = (multiprocessing.cpu_count() * 2) + 1 if hasattr(multiprocessing, "cpu_count") else 2
+# Default to WEB_CONCURRENCY, WORKERS, or settings.WEB_CONCURRENCY (default 2)
+default_workers = getattr(settings, "WEB_CONCURRENCY", 2) or 2
 workers = int(os.getenv("WEB_CONCURRENCY", os.getenv("WORKERS", str(default_workers))))
 worker_class = "uvicorn.workers.UvicornWorker"
 

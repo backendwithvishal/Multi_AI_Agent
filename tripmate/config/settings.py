@@ -295,6 +295,8 @@ class Settings(BaseSettings):
         # Fallback aliases from environment if not populated
         if not self.API_KEY:
             self.API_KEY = _parse_str("API_KEY") or None
+        if not self.JWT_SECRET_KEY:
+            self.JWT_SECRET_KEY = _parse_str("JWT_SECRET_KEY") or _parse_str("SECRET_KEY") or None
         if not self.ADMIN_REGISTRATION_SECRET:
             self.ADMIN_REGISTRATION_SECRET = _parse_str("ADMIN_REGISTRATION_SECRET") or None
 

@@ -133,8 +133,13 @@ def test_docker_smoke_script_exists():
 def test_docker_smoke_execution():
     """Executes scripts/smoke_docker.sh if docker engine daemon is accessible; otherwise skips cleanly."""
     import os
+    import sys
+
     if os.getenv("SKIP_DOCKER_SMOKE_IN_PYTEST") == "true":
         pytest.skip("Docker smoke execution handled in dedicated CI docker-build job")
+
+    if sys.platform == "win32":
+        pytest.skip("Bash smoke script execution skipped on Windows host; verified in Linux CI")
 
     if not shutil.which("docker"):
         pytest.skip("Docker CLI not installed on host")
