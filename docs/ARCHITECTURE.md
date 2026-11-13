@@ -38,7 +38,9 @@ flowchart TD
         Booking["booking (flights, hotels, price-lock, reserve)"]
         Runs["runs (details, metrics, agents, replay)"]
         Tasks["tasks (submit, get, list, cancel)"]
+        Trips["trips (CRUD, itineraries)"]
         Admin["admin (stats, users, circuit-breakers, cache, runs)"]
+
         Metrics["metrics (Prometheus scrape)"]
     end
 
@@ -59,7 +61,8 @@ flowchart TD
     end
 
     subgraph Persistence
-        Postgres["PostgreSQL 16\nUsers · Watchlists · Alerts · Assets"]
+        Postgres["PostgreSQL 16\nUsers · Trips · Bookings · Watchlists · Alerts · Assets · Audit Logs · Runs"]
+
         PgCheckpointer["LangGraph\nPostgresSaver Checkpointer"]
         Redis["Redis 7\nHybrid Cache\n(rate-limiting · MCP cache · response TTL)"]
         MemorySaver["MemorySaver\n(dev fallback only)"]

@@ -9,6 +9,19 @@ Versions are single-sourced in [pyproject.toml](pyproject.toml).
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-11-13
+
+### Added
+- **Migration 004**: `004_durability_and_async_persistence.py` creating relational tables:
+  - `trips` and `itineraries` with foreign keys and cascade deletion on user/trip delete.
+  - `bookings`, `price_locks`, `audit_logs`, `workflow_runs` with `SET NULL` on user delete for GDPR anonymization compliance.
+  - Partial unique index on active price locks (`uq_price_locks_active_offer_user`) allowing re-locking after expiry.
+  - Schema extensions for `watchlists` (`last_checked_at`), `alerts` (`channel`), and `assets` (`storage_key`, `scan_status` defaulting to `pending` with `clean` backfill).
+- **Trips CRUD API**: New owner-scoped endpoints under `/api/v1/trips` and `/api/v1/trips/{trip_id}/itineraries`.
+- **SQLAlchemy 2.0 Async Repositories**: Integrated async repositories and session factories with in-memory fallbacks for dev/test environments.
+- **CI Postgres Container**: Added PostgreSQL service container to GitHub Actions test workflow to run live database integration tests.
+
+
 ### Removed
 - Removed outdated audit archive logs from `docs/archive/` (`AUDIT.md`, `CODEBASE_AUDIT.md`, `OPERATIONS.md`, `THREAT_MODEL.md`).
 - Removed synthetic latency simulation script `benchmark.py` and unused evaluation framework `evaluation/`.

@@ -1,9 +1,11 @@
 import os
 
-os.environ["APP_ENV"] = "test"
-os.environ["ENV"] = "test"
-os.environ["DATABASE_URL"] = ""
-os.environ["REDIS_URL"] = ""
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("ENV", "test")
+if not os.getenv("RUN_LIVE_DB_TESTS"):
+    os.environ["DATABASE_URL"] = ""
+    os.environ["REDIS_URL"] = ""
+
 
 import gc
 

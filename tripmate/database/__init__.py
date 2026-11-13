@@ -42,6 +42,10 @@ from tripmate.config.settings import settings
 _db_pool: Optional[Any] = None
 _db_pool_init_attempted: bool = False
 checkpointer_pool: Optional[Any] = None
+_async_engine: Optional[Any] = None
+_async_session_factory: Optional[Any] = None
+_async_init_attempted: bool = False
+
 
 
 class PostgresCheckpointer(BaseCheckpointSaver):
@@ -218,9 +222,61 @@ def get_db_pool() -> Optional[Any]:
         return None
 
 
+def get_async_engine() -> Optional[Any]:
+    """Returns singleton SQLAlchemy 2.0 AsyncEngine for asynchronous repository operations."""
+    global _async_engine, _async_session_factory, _async_init_attempted
+    if _async_engine is not None:
+        return _async_engine
+    if _async_init_attempted and _async_engine is None:
+        return None
+
+    if settings.is_test and not os.getenv("RUN_LIVE_DB_TESTS"):
+        _async_init_attempted = True
+        return None
+
+    url = get_formatted_db_url()
+    if not url:
+        _async_init_attempted = True
+        return None
+
+    async_url = url
+    if async_url.startswith("postgres://"):
+        async_url = "postgresql+psycopg://" + async_url[len("postgres://") :]
+    elif async_url.startswith("postgresql://") and not async_url.startswith("postgresql+"):
+        async_url = "postgresql+psycopg://" + async_url[len("postgresql://") :]
+
+    try:
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+        _async_engine = create_async_engine(
+            async_url,
+            pool_size=settings.DB_POOL_MIN_SIZE,
+            max_overflow=max(0, settings.DB_POOL_MAX_SIZE - settings.DB_POOL_MIN_SIZE),
+            pool_timeout=settings.DB_POOL_TIMEOUT_SECONDS,
+            pool_pre_ping=True,
+        )
+        _async_session_factory = async_sessionmaker(_async_engine, expire_on_commit=False, class_=AsyncSession)
+        _async_init_attempted = True
+        return _async_engine
+    except Exception as exc:
+        _async_init_attempted = True
+        if settings.is_production:
+            logger.error(f"Failed to initialize async database engine in production: {exc}")
+            raise
+        logger.info(f"Async database engine unavailable ({exc}). Using in-memory fallback for development.")
+        return None
+
+
+def get_async_session_factory() -> Optional[Any]:
+    """Returns the singleton async sessionmaker for SQLAlchemy AsyncSessions."""
+    if _async_session_factory is None:
+        get_async_engine()
+    return _async_session_factory
+
+
 def close_db_pools():
     """Closes all database connection pools on shutdown."""
-    global _db_pool, _db_pool_init_attempted, checkpointer_pool
+    global _db_pool, _db_pool_init_attempted, checkpointer_pool, _async_engine, _async_session_factory, _async_init_attempted
     if _db_pool is not None:
         try:
             _db_pool.close()
@@ -235,6 +291,21 @@ def close_db_pools():
         except Exception:
             pass
         checkpointer_pool = None
+
+    if _async_engine is not None:
+        try:
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(_async_engine.dispose())
+            except RuntimeError:
+                asyncio.run(_async_engine.dispose())
+        except Exception:
+            pass
+        _async_engine = None
+        _async_session_factory = None
+        _async_init_attempted = False
+
 
 
 import atexit

@@ -142,6 +142,16 @@ docker compose up --build
 | `POST` | `/api/v1/booking/price-lock` | Lock price quote for 15 minutes |
 | `POST` | `/api/v1/booking/reserve` | Reserve flight/hotel booking |
 | `GET` | `/api/v1/booking/reservations/{booking_id}` | Get booking reservation details |
+| `POST` | `/api/v1/trips` | Create new travel project |
+| `GET` | `/api/v1/trips` | List owner's travel projects |
+| `GET` | `/api/v1/trips/{trip_id}` | Retrieve trip details |
+| `PUT` | `/api/v1/trips/{trip_id}` | Update trip project |
+| `DELETE` | `/api/v1/trips/{trip_id}` | Delete trip project |
+| `POST` | `/api/v1/trips/{trip_id}/itineraries` | Create itinerary under trip |
+| `GET` | `/api/v1/trips/{trip_id}/itineraries` | List itineraries for trip |
+| `GET` | `/api/v1/trips/{trip_id}/itineraries/{itinerary_id}` | Retrieve itinerary item |
+| `DELETE` | `/api/v1/trips/{trip_id}/itineraries/{itinerary_id}` | Delete itinerary item |
+
 | `GET` | `/api/v1/runs/{run_id}` | Get workflow run state |
 | `GET` | `/api/v1/runs/{run_id}/metrics` | Get token usage and cost metrics |
 | `GET` | `/api/v1/runs/{run_id}/agents` | Get specialist outputs and evidence |

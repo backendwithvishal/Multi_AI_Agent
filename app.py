@@ -27,6 +27,8 @@ from tripmate.api.v1.routes.ai_analysis import router as ai_analysis_v1_router
 from tripmate.api.v1.routes.approval import router as approval_v1_router
 from tripmate.api.v1.routes.auth import router as auth_v1_router
 from tripmate.api.v1.routes.booking import router as booking_v1_router
+from tripmate.api.v1.routes.trips import router as trips_v1_router
+
 from tripmate.api.v1.routes.budget import (
     legacy_router as financial_v1_router,
 )
@@ -343,7 +345,11 @@ v1_router.include_router(tasks_v1_router)
 # 13. GDS Travel Booking & Search (/api/v1/booking)
 v1_router.include_router(booking_v1_router)
 
+# 14. Trips & Itineraries Management (/api/v1/trips)
+v1_router.include_router(trips_v1_router)
+
 app.include_router(v1_router)
+
 
 
 # Legacy request payload schemas

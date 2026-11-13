@@ -453,3 +453,14 @@ class AIAgentInvokeRequest(BaseModel):
     agent_name: Optional[str] = Field(default=None, max_length=50)
     query: str = Field(..., min_length=1, max_length=2000)
     context: Dict[str, Any] = Field(default_factory=dict)
+
+
+from tripmate.schemas.trips import (
+    TripCreateRequest,
+    TripUpdateRequest,
+    TripItem,
+    ItineraryCreateRequest,
+    ItineraryUpdateRequest,
+    ItineraryItem,
+)
+

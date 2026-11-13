@@ -4,8 +4,9 @@ build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name = "multi-ai-agent"
-version = "3.0.0"
+version = "3.1.0"
 description = "Multi-Agent AI Orchestration Platform built with LangGraph, MCP, FastAPI, PostgreSQL, and Redis."
+
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
