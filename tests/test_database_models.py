@@ -2,22 +2,23 @@
 
 from datetime import datetime, timezone
 from decimal import Decimal
+
 from tripmate.database.models import (
-    Base,
-    User,
-    Trip,
-    Itinerary,
-    Booking,
-    PriceLock,
-    Watchlist,
     Alert,
+    ApiKey,
     Asset,
     AuditLog,
-    WorkflowRun,
+    Base,
+    Booking,
+    Itinerary,
     PasswordResetToken,
+    PriceLock,
     ThreadOwnership,
-    ApiKey,
+    Trip,
     UsageBudget,
+    User,
+    Watchlist,
+    WorkflowRun,
 )
 
 

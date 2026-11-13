@@ -12,7 +12,6 @@ from tripmate.schemas import APIResponse
 from tripmate.schemas.trips import (
     ItineraryCreateRequest,
     ItineraryItem,
-    ItineraryUpdateRequest,
     TripCreateRequest,
     TripItem,
     TripUpdateRequest,

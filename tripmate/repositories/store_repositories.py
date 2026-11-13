@@ -5,14 +5,14 @@ Provides DataStore-backed and isolated in-memory implementations for all reposit
 Supports dependency injection into application services and mock-based unit testing.
 """
 
+import json
+import logging
 import secrets
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from datetime import datetime, timezone
-import json
-import logging
 from tripmate.database import get_db_pool
 from tripmate.repositories.interfaces import (
     IAlertRepository,
@@ -34,7 +34,6 @@ def _format_dt(dt: Any) -> str:
     if isinstance(dt, datetime):
         return dt.isoformat()
     return str(dt)
-
 
 
 class StoreUserRepository(IUserRepository):
@@ -247,7 +246,17 @@ class StoreBookingRepository(IBookingRepository):
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                             RETURNING id, user_id, offer_id, offer_type, total_price, currency, status, expires_at;
                             """,
-                            (lock_id, user_id, offer_id, offer_type, total_price, currency, "ACTIVE", expires_at, now_dt),
+                            (
+                                lock_id,
+                                user_id,
+                                offer_id,
+                                offer_type,
+                                total_price,
+                                currency,
+                                "ACTIVE",
+                                expires_at,
+                                now_dt,
+                            ),
                         )
                         row = cur.fetchone()
                     conn.commit()
@@ -260,6 +269,7 @@ class StoreBookingRepository(IBookingRepository):
                             "currency": row["currency"],
                             "expires_at": int(row["expires_at"]),
                             "status": row["status"],
+                            "user_id": row.get("user_id"),
                         }
                         self._price_locks[lock_id] = record
                         return record
@@ -274,6 +284,7 @@ class StoreBookingRepository(IBookingRepository):
             "currency": currency,
             "expires_at": expires_at,
             "status": "LOCKED",
+            "user_id": user_id,
         }
         self._price_locks[lock_id] = record
         return record
@@ -316,6 +327,8 @@ class StoreBookingRepository(IBookingRepository):
         lock = self.get_price_lock(lock_id)
         if not lock:
             raise ValueError(f"Price lock '{lock_id}' does not exist.")
+        if lock.get("user_id") and lock["user_id"] != user_id:
+            raise ValueError(f"Price lock '{lock_id}' does not belong to user '{user_id}'.")
         if lock["expires_at"] < time.time():
             raise ValueError(f"Price lock '{lock_id}' has expired. Please re-lock price.")
         if lock["status"] in ("BOOKED", "REDEEMED"):
@@ -457,7 +470,18 @@ class StoreTripRepository(ITripRepository):
                             INSERT INTO trips (id, user_id, title, destination, start_date, end_date, budget, status, created_at, updated_at)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                             """,
-                            (trip_id, user_id, title, destination, start_date, end_date, budget, "PLANNING", now_dt, now_dt),
+                            (
+                                trip_id,
+                                user_id,
+                                title,
+                                destination,
+                                start_date,
+                                end_date,
+                                budget,
+                                "PLANNING",
+                                now_dt,
+                                now_dt,
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -626,7 +650,16 @@ class StoreItineraryRepository(IItineraryRepository):
                             INSERT INTO itineraries (id, trip_id, user_id, content, day_plans, status, created_at, updated_at)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
                             """,
-                            (itinerary_id, trip_id, user_id, content, json.dumps(day_plans) if day_plans else None, status, now_dt, now_dt),
+                            (
+                                itinerary_id,
+                                trip_id,
+                                user_id,
+                                content,
+                                json.dumps(day_plans) if day_plans else None,
+                                status,
+                                now_dt,
+                                now_dt,
+                            ),
                         )
                     conn.commit()
             except Exception as exc:
@@ -1025,8 +1058,8 @@ class StoreAuditLogRepository(IAuditLogRepository):
 
         logs = self._logs
         if actor:
-            logs = [l for l in logs if l.get("actor") == actor]
-        return sorted(logs, key=lambda l: l.get("created_at", ""), reverse=True)[:limit]
+            logs = [entry for entry in logs if entry.get("actor") == actor]
+        return sorted(logs, key=lambda entry: entry.get("created_at", ""), reverse=True)[:limit]
 
 
 # Default singleton instances for dependency injection
@@ -1040,4 +1073,3 @@ trip_repository: ITripRepository = StoreTripRepository()
 itinerary_repository: IItineraryRepository = StoreItineraryRepository()
 workflow_run_repository: IWorkflowRunRepository = StoreWorkflowRunRepository()
 audit_log_repository: IAuditLogRepository = StoreAuditLogRepository()
-

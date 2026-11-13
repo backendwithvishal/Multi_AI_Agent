@@ -3,8 +3,8 @@ SQLAlchemy 2.0 Database Models for TripMate Platform
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
 from decimal import Decimal
+from typing import Any, Dict, Optional
 
 from sqlalchemy import (
     BigInteger,

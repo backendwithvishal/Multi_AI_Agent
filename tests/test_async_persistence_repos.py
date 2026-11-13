@@ -3,6 +3,7 @@ Unit & Integration Tests for Async Persistence Repositories & Concurrency State
 """
 
 import time
+
 import pytest
 
 from tripmate.repositories.store_repositories import (
@@ -98,7 +99,16 @@ def test_booking_repository_price_lock_and_expiry_relock():
     assert lock2["locked_price"] == 475.0
     assert lock2["lock_id"] != lock1["lock_id"]
 
-    # 4. Reserve offer
+    # 4. Attempt reservation by another user must be rejected
+    with pytest.raises(ValueError, match="does not belong to user"):
+        booking_repository.create_reservation(
+            user_id="other_attacker_uid",
+            lock_id=lock2["lock_id"],
+            passenger_name="Attacker",
+            passenger_email="attacker@test.com",
+        )
+
+    # 5. Reserve offer
     reservation = booking_repository.create_reservation(
         user_id=uid,
         lock_id=lock2["lock_id"],
@@ -110,7 +120,7 @@ def test_booking_repository_price_lock_and_expiry_relock():
     assert reservation["pnr_code"] is not None
     assert reservation["booking_status"] == "CONFIRMED"
 
-    # 5. Second reservation with redeemed lock must raise ValueError
+    # 6. Second reservation with redeemed lock must raise ValueError
     with pytest.raises(ValueError, match="already been redeemed"):
         booking_repository.create_reservation(
             user_id=uid,
@@ -158,4 +168,3 @@ def test_workflow_run_and_audit_log_repositories():
 
     logs = audit_log_repository.list_logs(limit=10, actor="user_audit_run_test")
     assert len(logs) >= 1
-

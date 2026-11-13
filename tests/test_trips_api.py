@@ -30,7 +30,6 @@ async def test_trips_unauthenticated_returns_401(monkeypatch):
         assert resp.status_code == 401
 
 
-
 @pytest.mark.asyncio
 async def test_trip_crud_lifecycle(user1_headers, user2_headers):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

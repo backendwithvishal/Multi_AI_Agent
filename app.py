@@ -27,8 +27,6 @@ from tripmate.api.v1.routes.ai_analysis import router as ai_analysis_v1_router
 from tripmate.api.v1.routes.approval import router as approval_v1_router
 from tripmate.api.v1.routes.auth import router as auth_v1_router
 from tripmate.api.v1.routes.booking import router as booking_v1_router
-from tripmate.api.v1.routes.trips import router as trips_v1_router
-
 from tripmate.api.v1.routes.budget import (
     legacy_router as financial_v1_router,
 )
@@ -64,6 +62,7 @@ from tripmate.api.v1.routes.runs import router as runs_v1_router
 from tripmate.api.v1.routes.status import router as status_v1_router
 from tripmate.api.v1.routes.tasks import router as tasks_v1_router
 from tripmate.api.v1.routes.travel import router as travel_v1_router
+from tripmate.api.v1.routes.trips import router as trips_v1_router
 from tripmate.cache.redis_cache import hybrid_cache
 from tripmate.config.settings import settings
 from tripmate.middleware import (

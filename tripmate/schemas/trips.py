@@ -2,7 +2,8 @@
 Pydantic Schemas for Trips and Itineraries
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -57,4 +58,3 @@ class ItineraryItem(BaseModel):
     status: str = "DRAFT"
     created_at: str
     updated_at: str
-

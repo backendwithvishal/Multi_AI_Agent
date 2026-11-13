@@ -2,7 +2,7 @@
 Trip & Itinerary Domain Service
 """
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from tripmate.repositories.interfaces import IItineraryRepository, ITripRepository
 from tripmate.repositories.store_repositories import itinerary_repository, trip_repository

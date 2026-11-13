@@ -456,11 +456,20 @@ class AIAgentInvokeRequest(BaseModel):
 
 
 from tripmate.schemas.trips import (
-    TripCreateRequest,
-    TripUpdateRequest,
-    TripItem,
-    ItineraryCreateRequest,
-    ItineraryUpdateRequest,
-    ItineraryItem,
+    ItineraryCreateRequest as ItineraryCreateRequest,
 )
-
+from tripmate.schemas.trips import (
+    ItineraryItem as ItineraryItem,
+)
+from tripmate.schemas.trips import (
+    ItineraryUpdateRequest as ItineraryUpdateRequest,
+)
+from tripmate.schemas.trips import (
+    TripCreateRequest as TripCreateRequest,
+)
+from tripmate.schemas.trips import (
+    TripItem as TripItem,
+)
+from tripmate.schemas.trips import (
+    TripUpdateRequest as TripUpdateRequest,
+)
