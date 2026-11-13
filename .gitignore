@@ -26,6 +26,7 @@ tempCodeRunnerFile.py
 secrets/
 credentials/
 .streamlit/secrets.toml
+..BACKEND_REQUIREMENTS_AND_ROADMAP.md
 
 # 3. Python Bytecode, Compilations & Caching
 
@@ -144,4 +145,3 @@ __marimo__/
 # 10. Documentation Builds
 
 docs/_build/
-/site
