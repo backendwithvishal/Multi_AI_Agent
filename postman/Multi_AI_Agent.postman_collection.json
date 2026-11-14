@@ -1537,6 +1537,43 @@
       "name": "11. Workflow Observability, Runs & Replay",
       "item": [
         {
+          "name": "GET /api/v1/runs (List Workflow Runs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/runs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "runs"
+              ]
+            }
+          }
+        },
+        {
           "name": "GET /api/v1/runs/{run_id} (Run Details & Observability)",
           "event": [
             {

@@ -19,6 +19,10 @@ Versions are single-sourced in [pyproject.toml](pyproject.toml).
   - Schema extensions for `watchlists` (`last_checked_at`), `alerts` (`channel`), and `assets` (`storage_key`, `scan_status` defaulting to `pending` with `clean` backfill).
 - **Trips CRUD API**: New owner-scoped endpoints under `/api/v1/trips` and `/api/v1/trips/{trip_id}/itineraries`.
 - **SQLAlchemy 2.0 Async Repositories**: Integrated async repositories and session factories with in-memory fallbacks for dev/test environments.
+- **Async Checkpointer & Cross-Process HITL Resumption**: Integrated `AsyncPostgresSaver` support with latency telemetry; proved cross-process thread resumption via shared checkpointer without reliance on process-local state.
+- **Workflow Runs & Approval Persistence**: Migrated `RUN_STORE` to persistent `RunStoreProxy` backed by `workflow_run_repository` and PostgreSQL `workflow_runs` table with Redis read cache.
+- **Scheduled HITL Approval Expiry**: Added `cancel_expired_approvals()` and background worker `task_hitl_approval_expiry` cancelling threads past `APPROVAL_TTL_SECONDS` with regulatory audit logs.
+- **Specialist Concurrency Benchmark**: Documented specialist execution benchmarks (~3x speedup via `asyncio.gather`) and contention analysis in `docs/BENCHMARKS.md`.
 - **CI Postgres Container**: Added PostgreSQL service container to GitHub Actions test workflow to run live database integration tests.
 
 

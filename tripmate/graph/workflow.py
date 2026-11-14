@@ -274,6 +274,7 @@ async def itinerary_node(state: TravelState):
         "status": "WAITING_FOR_APPROVAL",
         "itinerary": str(itinerary_output.result),
         "approval_request": "Please review draft itinerary and approve or provide revision feedback.",
+        "approval_created_at": time.time(),
         "messages": [AIMessage(content="Draft itinerary synthesized.")],
         "metrics": metrics,
     }

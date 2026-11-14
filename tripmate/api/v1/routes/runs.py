@@ -33,6 +33,36 @@ def _check_run_access(run_data: Dict[str, Any], current_user: Dict[str, Any]) ->
 
 
 @router.get(
+    "",
+    summary="List Workflow Runs",
+    description="Retrieves a list of workflow execution runs scoped to authenticated user.",
+    response_model=APIResponse,
+)
+async def list_runs(
+    request: Request,
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user),
+    limit: int = 50,
+):
+    request_id = getattr(request.state, "request_id", "unknown")
+    user = current_user or {}
+    uid = user.get("id")
+    role = user.get("role")
+
+    all_runs = RUN_STORE.values()
+    if role != "admin" and uid:
+        user_runs = [r for r in all_runs if r.get("user_id") == uid]
+    else:
+        user_runs = all_runs
+
+    return APIResponse(
+        success=True,
+        data=user_runs[:limit],
+        error=None,
+        request_id=request_id,
+    )
+
+
+@router.get(
     "/{run_id}",
     summary="Get Workflow Run Details",
     description="Retrieves execution details, graph outputs, and telemetry for a workflow run.",

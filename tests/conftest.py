@@ -1,4 +1,5 @@
 import os
+import pydantic.root_model
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ENV", "test")

@@ -28,6 +28,7 @@ try:
     )
     from langgraph.checkpoint.memory import MemorySaver
     from langgraph.checkpoint.postgres import PostgresSaver
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 except ImportError:
     BaseCheckpointSaver = object  # type: ignore
     ChannelVersions = Any  # type: ignore
@@ -36,6 +37,7 @@ except ImportError:
     CheckpointTuple = Any  # type: ignore
     MemorySaver = None
     PostgresSaver = None
+    AsyncPostgresSaver = None
 
 from tripmate.config.settings import settings
 
@@ -45,7 +47,6 @@ checkpointer_pool: Optional[Any] = None
 _async_engine: Optional[Any] = None
 _async_session_factory: Optional[Any] = None
 _async_init_attempted: bool = False
-
 
 
 class PostgresCheckpointer(BaseCheckpointSaver):
@@ -105,6 +106,8 @@ class PostgresCheckpointer(BaseCheckpointSaver):
     async def aget_tuple(self, config: Dict[str, Any]) -> Optional[Any]:
         t0 = time.time()
         try:
+            if hasattr(self.saver, "aget_tuple"):
+                return await self.saver.aget_tuple(config)
             return await asyncio.to_thread(self.saver.get_tuple, config)
         finally:
             try:
@@ -122,6 +125,10 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         before: Optional[Dict[str, Any]] = None,
         limit: Optional[int] = None,
     ):
+        if hasattr(self.saver, "alist"):
+            async for item in self.saver.alist(config, filter=filter, before=before, limit=limit):
+                yield item
+            return
         items = await asyncio.to_thread(
             lambda: list(self.saver.list(config, filter=filter, before=before, limit=limit))
         )
@@ -137,6 +144,8 @@ class PostgresCheckpointer(BaseCheckpointSaver):
     ) -> Dict[str, Any]:
         t0 = time.time()
         try:
+            if hasattr(self.saver, "aput"):
+                return await self.saver.aput(config, checkpoint, metadata, new_versions)
             return await asyncio.to_thread(self.saver.put, config, checkpoint, metadata, new_versions)
         finally:
             try:
@@ -147,6 +156,8 @@ class PostgresCheckpointer(BaseCheckpointSaver):
                 pass
 
     async def aput_writes(self, config: Dict[str, Any], writes: Sequence[Any], task_id: str) -> None:
+        if hasattr(self.saver, "aput_writes"):
+            return await self.saver.aput_writes(config, writes, task_id)
         return await asyncio.to_thread(self.saver.put_writes, config, writes, task_id)
 
 
@@ -276,7 +287,13 @@ def get_async_session_factory() -> Optional[Any]:
 
 def close_db_pools():
     """Closes all database connection pools on shutdown."""
-    global _db_pool, _db_pool_init_attempted, checkpointer_pool, _async_engine, _async_session_factory, _async_init_attempted
+    global \
+        _db_pool, \
+        _db_pool_init_attempted, \
+        checkpointer_pool, \
+        _async_engine, \
+        _async_session_factory, \
+        _async_init_attempted
     if _db_pool is not None:
         try:
             _db_pool.close()
@@ -295,6 +312,7 @@ def close_db_pools():
     if _async_engine is not None:
         try:
             import asyncio
+
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(_async_engine.dispose())
@@ -305,7 +323,6 @@ def close_db_pools():
         _async_engine = None
         _async_session_factory = None
         _async_init_attempted = False
-
 
 
 import atexit
@@ -444,9 +461,7 @@ def initialize_checkpointer():
 
     if not is_dev:
         if db_url:
-            raise RuntimeError(
-                "Production startup failed: PostgreSQL checkpointer initialization failed."
-            )
+            raise RuntimeError("Production startup failed: PostgreSQL checkpointer initialization failed.")
         logger.warning(
             "DATABASE_URL not configured in production mode. "
             "Falling back to MemorySaver (thread state will not persist across container restarts)."

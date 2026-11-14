@@ -49,6 +49,7 @@ class TravelState(TypedDict, total=False):
 
     # Human-In-The-Loop (HITL) review & feedback
     approval_request: str
+    approval_created_at: float
     approved: bool
     human_feedback: str
     final_response: str

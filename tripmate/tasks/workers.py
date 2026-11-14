@@ -110,7 +110,22 @@ async def task_system_health_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def task_hitl_approval_expiry(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Cancels pending Human-In-The-Loop approval threads that have exceeded APPROVAL_TTL_SECONDS.
+    """
+    from tripmate.config.settings import settings
+
+    cancelled_count = await travel_service.cancel_expired_approvals()
+    return {
+        "status": "COMPLETED",
+        "expired_threads": cancelled_count,
+        "ttl_seconds": settings.APPROVAL_TTL_SECONDS,
+    }
+
+
 # Auto-register standard task workers into task_queue
 task_queue.register_handler("watchlist_price_scan", task_watchlist_price_scan)
 task_queue.register_handler("background_itinerary", task_background_itinerary)
 task_queue.register_handler("system_health_audit", task_system_health_audit)
+task_queue.register_handler("hitl_approval_expiry", task_hitl_approval_expiry)

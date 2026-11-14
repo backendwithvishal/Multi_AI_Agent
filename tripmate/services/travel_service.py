@@ -13,7 +13,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fastapi import HTTPException, Request, status
 from langchain_core.messages import HumanMessage
@@ -29,8 +29,103 @@ from tripmate.services.observability import calculate_cost, estimate_tokens
 
 logger = logging.getLogger("tripmate.travel_service")
 
-# Global in-memory store for workflow run telemetry and replay history
-RUN_STORE: Dict[str, Dict[str, Any]] = {}
+
+class RunStoreProxy:
+    """
+    Persistent Workflow Run store proxy bridging workflow_run_repository
+    (PostgreSQL workflow_runs table) with hybrid Redis caching and in-memory fallback.
+    Maintains full dict-like interface compatibility.
+    """
+
+    def __init__(self):
+        self._memory_cache: Dict[str, Dict[str, Any]] = {}
+
+    def __getitem__(self, run_id: str) -> Dict[str, Any]:
+        item = self.get(run_id)
+        if item is None:
+            raise KeyError(run_id)
+        return item
+
+    def __setitem__(self, run_id: str, payload: Dict[str, Any]) -> None:
+        self._memory_cache[run_id] = payload
+        try:
+            from tripmate.repositories.store_repositories import workflow_run_repository
+
+            workflow_run_repository.create(
+                run_id=run_id,
+                user_id=payload.get("user_id"),
+                thread_id=payload.get("thread_id"),
+                status=payload.get("status", "RUNNING"),
+                query=payload.get("query") or payload.get("user_query"),
+                itinerary=payload.get("itinerary") or payload.get("answer"),
+                metrics=payload.get("metrics"),
+                events=payload.get("events"),
+            )
+        except Exception as exc:
+            logger.debug(f"Persistence notice for workflow run {run_id}: {exc}")
+
+    def __contains__(self, run_id: object) -> bool:
+        if not isinstance(run_id, str):
+            return False
+        return self.get(run_id) is not None
+
+    def get(self, run_id: str, default: Any = None) -> Optional[Dict[str, Any]]:
+        if run_id in self._memory_cache:
+            return self._memory_cache[run_id]
+
+        try:
+            from tripmate.repositories.store_repositories import workflow_run_repository
+
+            repo_run = workflow_run_repository.get_by_id(run_id)
+            if repo_run:
+                run_dict = dict(repo_run)
+                if "answer" not in run_dict and "itinerary" in run_dict:
+                    run_dict["answer"] = run_dict["itinerary"]
+                self._memory_cache[run_id] = run_dict
+                return run_dict
+        except Exception as exc:
+            logger.debug(f"Lookup notice for workflow run {run_id}: {exc}")
+
+        return default
+
+    def pop(self, run_id: str, default: Any = None) -> Any:
+        return self._memory_cache.pop(run_id, default)
+
+    def values(self) -> List[Dict[str, Any]]:
+        try:
+            from tripmate.repositories.store_repositories import workflow_run_repository
+
+            repo_runs = workflow_run_repository.list_all(limit=100)
+            seen_ids = set()
+            combined = []
+            for r in repo_runs:
+                seen_ids.add(r["id"])
+                combined.append(r)
+            for k, v in self._memory_cache.items():
+                if k not in seen_ids:
+                    combined.append(v)
+            return combined
+        except Exception:
+            return list(self._memory_cache.values())
+
+    def keys(self) -> List[str]:
+        return [r["id"] if "id" in r else r.get("run_id", "") for r in self.values()]
+
+    def items(self) -> List[tuple[str, Dict[str, Any]]]:
+        return [(k, self.get(k)) for k in self.keys() if self.get(k) is not None]
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def __len__(self) -> int:
+        return len(self.values())
+
+    def clear(self) -> None:
+        self._memory_cache.clear()
+
+
+# Persistent store for workflow run telemetry and replay history
+RUN_STORE: RunStoreProxy = RunStoreProxy()
 
 # Active in-flight runs registry for graceful shutdown
 ACTIVE_RUNS: set[asyncio.Task] = set()
@@ -118,6 +213,7 @@ def serialize_graph_result(result: Dict[str, Any], thread_id: str, run_id: Optio
     payload = {
         "run_id": effective_run_id,
         "thread_id": thread_id,
+        "user_id": result.get("user_id"),
         "status": result.get("status", "COMPLETED" if not interrupt_data else "WAITING_FOR_APPROVAL"),
         "answer": answer,
         "requires_approval": interrupt_data is not None,
@@ -196,7 +292,14 @@ class TravelService(metaclass=SingletonMeta):
         serialized = serialize_graph_result(result, thread_id, run_id=run_id)
 
         if serialized.get("requires_approval"):
-            self._approval_timestamps[thread_id] = time.time()
+            now_ts = time.time()
+            self._approval_timestamps[thread_id] = now_ts
+            try:
+                from tripmate.cache.redis_cache import hybrid_cache
+
+                await hybrid_cache.set("approval_ts", thread_id, now_ts, ttl=settings.APPROVAL_TTL_SECONDS)
+            except Exception:
+                pass
 
         return serialized
 
@@ -250,6 +353,16 @@ class TravelService(metaclass=SingletonMeta):
 
         # TTL validation on pending approval
         created_at = self._approval_timestamps.get(thread_id) or state_values.get("approval_created_at")
+        if not created_at:
+            try:
+                from tripmate.cache.redis_cache import hybrid_cache
+
+                cached_ts = await hybrid_cache.get("approval_ts", thread_id)
+                if cached_ts:
+                    created_at = float(cached_ts)
+            except Exception:
+                pass
+
         if created_at and (time.time() - created_at > settings.APPROVAL_TTL_SECONDS):
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
@@ -271,7 +384,66 @@ class TravelService(metaclass=SingletonMeta):
         serialized = serialize_graph_result(result, thread_id)
         self._approval_history[thread_id] = serialized
         self._approval_timestamps.pop(thread_id, None)
+        try:
+            from tripmate.cache.redis_cache import hybrid_cache
+
+            await hybrid_cache.delete("approval_ts", thread_id)
+            await hybrid_cache.set("approval_history", thread_id, serialized)
+        except Exception:
+            pass
         return serialized
+
+    async def cancel_expired_approvals(self) -> int:
+        """Scheduled job that cancels pending HITL approval threads past APPROVAL_TTL_SECONDS."""
+        now = time.time()
+        cancelled_count = 0
+        from tripmate.core.audit import AuditEventType, audit_logger
+        from tripmate.repositories.store_repositories import workflow_run_repository
+
+        for run_id in list(RUN_STORE.keys()):
+            run = RUN_STORE.get(run_id)
+            if not run or run.get("status") != "WAITING_FOR_APPROVAL":
+                continue
+
+            thread_id = run.get("thread_id")
+            created_at = self._approval_timestamps.get(thread_id) or run.get("start_time")
+            if not created_at and run.get("created_at"):
+                try:
+                    from datetime import datetime
+
+                    dt = datetime.fromisoformat(run["created_at"])
+                    created_at = dt.timestamp()
+                except Exception:
+                    pass
+
+            if created_at and (now - created_at > settings.APPROVAL_TTL_SECONDS):
+                run["status"] = "EXPIRED"
+                RUN_STORE[run_id] = run
+                if thread_id:
+                    self._approval_timestamps.pop(thread_id, None)
+                    try:
+                        from tripmate.cache.redis_cache import hybrid_cache
+
+                        await hybrid_cache.delete("approval_ts", thread_id)
+                    except Exception:
+                        pass
+                try:
+                    workflow_run_repository.update(run_id, {"status": "EXPIRED"})
+                except Exception:
+                    pass
+                cancelled_count += 1
+
+                audit_logger.record(
+                    event_type=AuditEventType.APPROVAL_DECISION,
+                    action="hitl_approval_expired",
+                    actor="system_scheduler",
+                    target_id=thread_id or run_id,
+                    status="expired",
+                    details={"run_id": run_id, "ttl_seconds": settings.APPROVAL_TTL_SECONDS},
+                )
+                logger.info(f"Marked pending approval thread '{thread_id}' (run {run_id}) as EXPIRED past TTL.")
+
+        return cancelled_count
 
     async def stream_travel_events(
         self,

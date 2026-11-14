@@ -152,6 +152,7 @@ docker compose up --build
 | `GET` | `/api/v1/trips/{trip_id}/itineraries/{itinerary_id}` | Retrieve itinerary item |
 | `DELETE` | `/api/v1/trips/{trip_id}/itineraries/{itinerary_id}` | Delete itinerary item |
 
+| `GET` | `/api/v1/runs` | List workflow execution runs |
 | `GET` | `/api/v1/runs/{run_id}` | Get workflow run state |
 | `GET` | `/api/v1/runs/{run_id}/metrics` | Get token usage and cost metrics |
 | `GET` | `/api/v1/runs/{run_id}/agents` | Get specialist outputs and evidence |
