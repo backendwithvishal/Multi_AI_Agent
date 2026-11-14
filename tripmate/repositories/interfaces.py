@@ -76,6 +76,7 @@ class IAlertRepository(ABC):
         alert_type: str = "price_drop",
         severity: str = "info",
         watchlist_id: Optional[str] = None,
+        channel: str = "IN_APP",
     ) -> Dict[str, Any]:
         pass
 
@@ -104,6 +105,8 @@ class IAssetRepository(ABC):
         trip_id: Optional[str] = None,
         content_uri: Optional[str] = "",
         metadata: Optional[Dict[str, Any]] = None,
+        storage_key: Optional[str] = None,
+        scan_status: str = "pending",
     ) -> Dict[str, Any]:
         pass
 
@@ -136,7 +139,14 @@ class IBookingRepository(ABC):
     """Repository interface for GDS Fare Price Locks and Reservations."""
 
     @abstractmethod
-    def lock_price(self, offer_id: str, offer_type: str, total_price: float, currency: str = "USD") -> Dict[str, Any]:
+    def lock_price(
+        self,
+        offer_id: str,
+        offer_type: str,
+        total_price: float,
+        currency: str = "USD",
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         pass
 
     @abstractmethod
@@ -272,4 +282,3 @@ class IAuditLogRepository(ABC):
     @abstractmethod
     def list_logs(self, limit: int = 100, actor: Optional[str] = None) -> List[Dict[str, Any]]:
         pass
-
