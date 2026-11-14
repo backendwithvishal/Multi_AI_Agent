@@ -6,11 +6,11 @@ and asserts each digest genuinely resolves with HTTP 200 in the target registry.
 Exits 0 if all resolve, exits 1 on invalid/missing digest, exits 2 on network failure.
 """
 
-import sys
-import re
 import json
-import urllib.request
+import re
+import sys
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent

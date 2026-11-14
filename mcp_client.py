@@ -111,6 +111,7 @@ def create_mcp_client() -> MultiServerMCPClient:
 
 
 from contextlib import AsyncExitStack
+
 from langchain_mcp_adapters.tools import load_mcp_tools
 
 
@@ -318,7 +319,7 @@ async def forecast_mcp_search(city: str, request_id: Optional[str] = None):
 
 async def extract_destination(query: str) -> str:
     """Extracts target destination using configured LLM or fallback heuristics."""
-    from tripmate.services.model_router import model_router, ModelTier
+    from tripmate.services.model_router import ModelTier, model_router
 
     active_llm = model_router.get_model(ModelTier.FAST) or get_groq_llm()
     if active_llm:

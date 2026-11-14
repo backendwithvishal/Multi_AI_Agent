@@ -2,8 +2,8 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from sqlalchemy import engine_from_config, pool
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Ensure root directory is in sys.path
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -29,13 +29,13 @@ def get_sqlalchemy_url() -> str:
     raw_url = get_formatted_db_url() or settings.DATABASE_URL
     if not raw_url:
         return "postgresql+psycopg://postgres:postgres@localhost:5432/tripmate_db"
-    
+
     # Format driver for SQLAlchemy
     if raw_url.startswith("postgres://"):
         raw_url = "postgresql+psycopg://" + raw_url[len("postgres://"):]
     elif raw_url.startswith("postgresql://") and not raw_url.startswith("postgresql+"):
         raw_url = "postgresql+psycopg://" + raw_url[len("postgresql://"):]
-        
+
     return raw_url
 
 
@@ -57,7 +57,7 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     configuration = config.get_section(config.config_ini_section) or {}
     configuration["sqlalchemy.url"] = get_sqlalchemy_url()
-    
+
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",

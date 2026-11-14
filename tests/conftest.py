@@ -1,5 +1,6 @@
 import os
-import pydantic.root_model
+
+import pydantic.root_model  # noqa: F401
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("ENV", "test")

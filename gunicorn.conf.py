@@ -1,8 +1,8 @@
 """
 Gunicorn Configuration for Production Deployment
 """
-import multiprocessing
 import os
+
 from tripmate.config.settings import settings
 
 # Bind host and port
