@@ -1,6 +1,6 @@
 """Add trips, itineraries, bookings, price_locks, audit_logs, workflow_runs and schema extensions
 
-Revision ID: 004_durability_and_async_persistence
+Revision ID: 004_durability_persistence
 Revises: 003_api_keys_and_budgets
 Create Date: 2026-11-13 22:30:00.000000
 
@@ -11,13 +11,16 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "004_durability_and_async_persistence"
+revision: str = "004_durability_persistence"
 down_revision: Union[str, None] = "003_api_keys_and_budgets"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Expand alembic_version column to prevent future truncation
+    op.alter_column("alembic_version", "version_num", type_=sa.String(128), existing_type=sa.String(32))
+
     # 1. Trips table (owner-scoped travel projects)
     op.create_table(
         "trips",

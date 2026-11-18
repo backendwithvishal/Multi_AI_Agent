@@ -206,7 +206,7 @@ async def get_reservation(
     user_role = current_user.get("role") or current_user.get("rol") if current_user else "user"
 
     effective_user_id = None if user_role == "admin" else user_id
-    reservation = gds_client.get_reservation(booking_id, user_id=effective_user_id)
+    reservation = await gds_client.get_reservation_async(booking_id, user_id=effective_user_id)
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

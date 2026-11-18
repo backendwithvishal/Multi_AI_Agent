@@ -611,7 +611,14 @@ if __name__ == "__main__":
         port = settings.PORT
 
     trusted = settings.TRUSTED_PROXIES
-    allowed_proxies = ",".join(trusted) if isinstance(trusted, list) else str(trusted)
+    if isinstance(trusted, str):
+        trusted_list = [x.strip() for x in trusted.split(",") if x.strip()]
+    else:
+        trusted_list = list(trusted)
+    if any("/" in t or t == "*" for t in trusted_list):
+        allowed_proxies = "*"
+    else:
+        allowed_proxies = ",".join(trusted_list)
 
     if settings.is_dev:
         # Development mode: localhost only, reload=True

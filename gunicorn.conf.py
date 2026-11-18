@@ -20,11 +20,19 @@ graceful_timeout = int(os.getenv("GRACEFUL_TIMEOUT", "30"))
 keepalive = int(os.getenv("KEEP_ALIVE", "5"))
 
 # Reverse Proxy Headers (forwarded_allow_ips)
+# Gunicorn's forwarded_allow_ips only accepts individual IP addresses or '*' (no CIDR blocks).
+# When TRUSTED_PROXIES includes subnet ranges or '*', forward_allow_ips must be '*' so Gunicorn
+# passes through the headers, allowing FastAPI's application middleware to evaluate trusted CIDRs.
 trusted = settings.TRUSTED_PROXIES
-if isinstance(trusted, list):
-    forwarded_allow_ips = ",".join(trusted)
+if isinstance(trusted, str):
+    trusted_list = [x.strip() for x in trusted.split(",") if x.strip()]
 else:
-    forwarded_allow_ips = str(trusted)
+    trusted_list = list(trusted)
+
+if any("/" in t or t == "*" for t in trusted_list):
+    forwarded_allow_ips = "*"
+else:
+    forwarded_allow_ips = ",".join(trusted_list)
 
 # Logging
 accesslog = "-"

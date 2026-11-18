@@ -83,7 +83,7 @@ async def get_task_status(
     user_role = current_user.get("role") or current_user.get("rol") if current_user else "user"
 
     effective_user_id = None if user_role == "admin" else user_id
-    task = task_queue.get_task(task_id, user_id=effective_user_id)
+    task = await task_queue.get_task_async(task_id, user_id=effective_user_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

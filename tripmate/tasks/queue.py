@@ -86,6 +86,11 @@ class AsyncTaskQueue:
             "finished_at": None,
         }
         self._tasks[task_id] = record
+        try:
+            from tripmate.cache.redis_cache import hybrid_cache
+            await hybrid_cache.set("tasks", task_id, record, ttl_seconds=86400)
+        except Exception:
+            pass
         await self._queue.put(task_id)
         logger.info(f"Enqueued background task {task_id} ('{task_name}')")
         return record
@@ -93,6 +98,26 @@ class AsyncTaskQueue:
     def get_task(self, task_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Retrieves a task record by ID, optionally verifying ownership."""
         task = self._tasks.get(task_id)
+        if not task:
+            return None
+        if user_id and task.get("user_id") and task["user_id"] != user_id:
+            return None
+        return task
+
+    async def get_task_async(self, task_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Retrieves a task record by ID from memory or Redis, verifying ownership."""
+        task = None
+        try:
+            from tripmate.cache.redis_cache import hybrid_cache
+            task = await hybrid_cache.get("tasks", task_id)
+        except Exception:
+            pass
+
+        if task:
+            self._tasks[task_id] = task
+        else:
+            task = self._tasks.get(task_id)
+
         if not task:
             return None
         if user_id and task.get("user_id") and task["user_id"] != user_id:
@@ -119,7 +144,7 @@ class AsyncTaskQueue:
 
     async def cancel_task(self, task_id: str, user_id: Optional[str] = None) -> bool:
         """Cancels a pending or running task."""
-        task = self.get_task(task_id, user_id=user_id)
+        task = await self.get_task_async(task_id, user_id=user_id)
         if not task:
             return False
         if task["status"] in ("COMPLETED", "FAILED", "CANCELLED"):
@@ -127,6 +152,13 @@ class AsyncTaskQueue:
 
         task["status"] = "CANCELLED"
         task["finished_at"] = datetime.now(timezone.utc).isoformat()
+        self._tasks[task_id] = task
+
+        try:
+            from tripmate.cache.redis_cache import hybrid_cache
+            await hybrid_cache.set("tasks", task_id, task, ttl_seconds=86400)
+        except Exception:
+            pass
 
         # If currently running in asyncio task, cancel it
         if task_id in self._running_asyncio_tasks:
@@ -172,6 +204,11 @@ class AsyncTaskQueue:
             task_record["status"] = "RUNNING"
             task_record["started_at"] = datetime.now(timezone.utc).isoformat()
             task_record["progress_percent"] = 10
+            try:
+                from tripmate.cache.redis_cache import hybrid_cache
+                await hybrid_cache.set("tasks", task_id, task_record, ttl_seconds=86400)
+            except Exception:
+                pass
             handler = self._handlers.get(task_record["name"])
 
             try:
@@ -193,6 +230,11 @@ class AsyncTaskQueue:
             finally:
                 task_record["finished_at"] = datetime.now(timezone.utc).isoformat()
                 self._running_asyncio_tasks.pop(task_id, None)
+                try:
+                    from tripmate.cache.redis_cache import hybrid_cache
+                    await hybrid_cache.set("tasks", task_id, task_record, ttl_seconds=86400)
+                except Exception:
+                    pass
 
     def get_stats(self) -> Dict[str, Any]:
         """Returns diagnostic telemetry stats for the task queue."""

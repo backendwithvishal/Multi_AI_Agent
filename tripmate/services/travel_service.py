@@ -25,9 +25,10 @@ from tripmate.core.singleton import SingletonMeta
 from tripmate.database.store import store
 from tripmate.graph.state import TravelState
 from tripmate.graph.workflow import travel_workflow_graph
+from tripmate.core.logging import get_structured_logger
 from tripmate.services.observability import calculate_cost, estimate_tokens
 
-logger = logging.getLogger("tripmate.travel_service")
+logger = get_structured_logger("tripmate.travel_service")
 
 
 class RunStoreProxy:

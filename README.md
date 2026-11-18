@@ -250,6 +250,9 @@ docker compose up --build
 | `OPENWEATHER_API_KEY` | `""` | OpenWeather API key |
 | `OTEL_ENABLED` | `false` | Enable OpenTelemetry tracing exporter |
 | `PORT` | `8000` | Server listening port |
+| `POSTGRES_DB` | `"tripmate_db"` | PostgreSQL database name |
+| `POSTGRES_PASSWORD` | `"postgres"` | PostgreSQL database password |
+| `POSTGRES_USER` | `"postgres"` | PostgreSQL database username |
 | `RATE_LIMIT_REQUESTS` | `30` | Requests allowed per sliding window |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Duration of sliding rate limit window in seconds |
 | `REASONING_LLM_MODEL` | `"llama-3.3-70b-versatile"` | High-capacity model for synthesis and planning |

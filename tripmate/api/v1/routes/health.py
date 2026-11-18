@@ -68,11 +68,11 @@ async def readiness_probe(response: Response):
     is_ready = True
     reasons = []
 
-    if settings.APP_ENV == "production":
-        if db_health.get("status") == "unhealthy":
-            is_ready = False
-            reasons.append("Database connection probe failed.")
-        if hybrid_cache._use_redis and not cache_ping:
+    if db_health.get("status") == "unhealthy":
+        is_ready = False
+        reasons.append("Database connection probe failed.")
+    if not cache_ping and settings.REDIS_URL and not settings.FAIL_OPEN_REDIS:
+        if settings.APP_ENV == "production" or not getattr(hybrid_cache, "in_memory", None):
             is_ready = False
             reasons.append("Redis cache connection probe failed.")
 

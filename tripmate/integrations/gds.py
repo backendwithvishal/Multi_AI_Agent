@@ -183,6 +183,11 @@ class GDSBookingClient(metaclass=SingletonMeta):
             "status": "LOCKED",
         }
         self._price_locks[lock_id] = record
+        try:
+            from tripmate.cache.redis_cache import hybrid_cache
+            await hybrid_cache.set("gds_locks", lock_id, record, ttl_seconds=1200)
+        except Exception:
+            pass
         return record
 
     async def create_reservation(
@@ -195,6 +200,12 @@ class GDSBookingClient(metaclass=SingletonMeta):
     ) -> Dict[str, Any]:
         """Finalizes booking reservation and issues GDS PNR Confirmation."""
         lock = self._price_locks.get(lock_id)
+        if not lock:
+            try:
+                from tripmate.cache.redis_cache import hybrid_cache
+                lock = await hybrid_cache.get("gds_locks", lock_id)
+            except Exception:
+                pass
         if not lock:
             raise ValueError(f"Price lock '{lock_id}' does not exist.")
         if lock.get("user_id") and lock["user_id"] != user_id:
@@ -223,7 +234,15 @@ class GDSBookingClient(metaclass=SingletonMeta):
         }
 
         lock["status"] = "BOOKED"
+        self._price_locks[lock_id] = lock
         self._reservations[booking_id] = reservation
+        try:
+            from tripmate.cache.redis_cache import hybrid_cache
+            await hybrid_cache.set("gds_locks", lock_id, lock, ttl_seconds=1200)
+            await hybrid_cache.set("gds_res", booking_id, reservation, ttl_seconds=86400)
+        except Exception:
+            pass
+
         logger.info(
             f"Created reservation {reservation['booking_id']} (PNR: {reservation['pnr_code']}) for user {user_id}"
         )
@@ -232,6 +251,21 @@ class GDSBookingClient(metaclass=SingletonMeta):
     def get_reservation(self, booking_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Retrieves booking record with ownership check."""
         res = self._reservations.get(booking_id)
+        if not res:
+            return None
+        if user_id and res["user_id"] != user_id:
+            return None
+        return res
+
+    async def get_reservation_async(self, booking_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Retrieves booking record with ownership check from memory or Redis."""
+        res = self._reservations.get(booking_id)
+        if not res:
+            try:
+                from tripmate.cache.redis_cache import hybrid_cache
+                res = await hybrid_cache.get("gds_res", booking_id)
+            except Exception:
+                pass
         if not res:
             return None
         if user_id and res["user_id"] != user_id:

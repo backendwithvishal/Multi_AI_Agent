@@ -106,8 +106,11 @@ class PostgresCheckpointer(BaseCheckpointSaver):
     async def aget_tuple(self, config: Dict[str, Any]) -> Optional[Any]:
         t0 = time.time()
         try:
-            if hasattr(self.saver, "aget_tuple"):
-                return await self.saver.aget_tuple(config)
+            try:
+                if hasattr(self.saver, "aget_tuple"):
+                    return await self.saver.aget_tuple(config)
+            except (NotImplementedError, AttributeError):
+                pass
             return await asyncio.to_thread(self.saver.get_tuple, config)
         finally:
             try:
@@ -125,10 +128,13 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         before: Optional[Dict[str, Any]] = None,
         limit: Optional[int] = None,
     ):
-        if hasattr(self.saver, "alist"):
-            async for item in self.saver.alist(config, filter=filter, before=before, limit=limit):
-                yield item
-            return
+        try:
+            if hasattr(self.saver, "alist"):
+                async for item in self.saver.alist(config, filter=filter, before=before, limit=limit):
+                    yield item
+                return
+        except (NotImplementedError, AttributeError):
+            pass
         items = await asyncio.to_thread(
             lambda: list(self.saver.list(config, filter=filter, before=before, limit=limit))
         )
@@ -144,8 +150,11 @@ class PostgresCheckpointer(BaseCheckpointSaver):
     ) -> Dict[str, Any]:
         t0 = time.time()
         try:
-            if hasattr(self.saver, "aput"):
-                return await self.saver.aput(config, checkpoint, metadata, new_versions)
+            try:
+                if hasattr(self.saver, "aput"):
+                    return await self.saver.aput(config, checkpoint, metadata, new_versions)
+            except (NotImplementedError, AttributeError):
+                pass
             return await asyncio.to_thread(self.saver.put, config, checkpoint, metadata, new_versions)
         finally:
             try:
@@ -156,8 +165,11 @@ class PostgresCheckpointer(BaseCheckpointSaver):
                 pass
 
     async def aput_writes(self, config: Dict[str, Any], writes: Sequence[Any], task_id: str) -> None:
-        if hasattr(self.saver, "aput_writes"):
-            return await self.saver.aput_writes(config, writes, task_id)
+        try:
+            if hasattr(self.saver, "aput_writes"):
+                return await self.saver.aput_writes(config, writes, task_id)
+        except (NotImplementedError, AttributeError):
+            pass
         return await asyncio.to_thread(self.saver.put_writes, config, writes, task_id)
 
 

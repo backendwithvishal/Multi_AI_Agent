@@ -178,9 +178,12 @@ class Settings(BaseSettings):
     LANGCHAIN_PROJECT: str = "tripmate-ai"
     LANGCHAIN_ENDPOINT: str = "https://api.smith.langchain.com"
 
-    # Datastore URLs
+    # Datastore URLs & Credentials
     DATABASE_URL: Optional[str] = None
     REDIS_URL: Optional[str] = None
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_DB: str = "tripmate_db"
 
     # Performance & Rate Limits
     CACHE_TTL_SECONDS: int = 3600
