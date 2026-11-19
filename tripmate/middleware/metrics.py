@@ -40,7 +40,10 @@ MODEL_PRICING_PER_MILLION = {
     "llama-3.3-70b-versatile": {"prompt": 0.59, "completion": 0.79},
     "llama-3.1-8b-instant": {"prompt": 0.05, "completion": 0.08},
     "meta-llama/llama-3.3-70b-instruct:free": {"prompt": 0.0, "completion": 0.0},
+    "meta-llama/llama-3.2-3b-instruct:free": {"prompt": 0.0, "completion": 0.0},
     "meta-llama/llama-3.1-8b-instruct:free": {"prompt": 0.0, "completion": 0.0},
+    "meta-llama/Llama-3.3-70B-Instruct": {"prompt": 0.0, "completion": 0.0},
+    "meta-llama/Llama-3.2-3B-Instruct": {"prompt": 0.0, "completion": 0.0},
 }
 DEFAULT_PRICING = {"prompt": 0.30, "completion": 0.60}
 

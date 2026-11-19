@@ -146,7 +146,7 @@ class OpenRouterProviderStrategy(LLMProviderStrategy):
         if tier == ModelTier.FAST:
             openrouter_model = os.getenv(
                 "OPENROUTER_FAST_MODEL",
-                os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
+                os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.2-3b-instruct:free"),
             )
         else:
             openrouter_model = os.getenv(
@@ -192,7 +192,7 @@ class HuggingFaceProviderStrategy(LLMProviderStrategy):
             return None
 
         if tier == ModelTier.FAST:
-            hf_model = os.getenv("HUGGINGFACE_FAST_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct")
+            hf_model = os.getenv("HUGGINGFACE_FAST_MODEL", "meta-llama/Llama-3.2-3B-Instruct")
         else:
             hf_model = os.getenv(
                 "HUGGINGFACE_REASONING_MODEL",

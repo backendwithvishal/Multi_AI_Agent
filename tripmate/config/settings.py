@@ -161,9 +161,9 @@ class Settings(BaseSettings):
     # Model Tier Selection
     FAST_LLM_MODEL: str = "llama-3.1-8b-instant"
     REASONING_LLM_MODEL: str = "llama-3.3-70b-versatile"
-    OPENROUTER_FAST_MODEL: str = "meta-llama/llama-3.1-8b-instruct:free"
+    OPENROUTER_FAST_MODEL: str = "meta-llama/llama-3.2-3b-instruct:free"
     OPENROUTER_REASONING_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
-    HUGGINGFACE_FAST_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    HUGGINGFACE_FAST_MODEL: str = "meta-llama/Llama-3.2-3B-Instruct"
     HUGGINGFACE_REASONING_MODEL: str = "meta-llama/Llama-3.3-70B-Instruct"
 
     # Server & Process Concurrency
