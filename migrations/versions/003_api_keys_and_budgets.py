@@ -6,9 +6,9 @@ Create Date: 2026-10-30 18:00:00.000000
 
 """
 from typing import Sequence, Union
-from alembic import op
+
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from alembic import op
 
 revision: str = "003_api_keys_and_budgets"
 down_revision: Union[str, None] = "002_align_schema"

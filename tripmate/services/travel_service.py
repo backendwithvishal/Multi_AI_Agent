@@ -10,7 +10,6 @@ Orchestrates all LangGraph workflow executions:
 
 import asyncio
 import json
-import logging
 import time
 import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -21,11 +20,11 @@ from langgraph.types import Command
 
 from tripmate.api.dependencies import validate_thread_ownership
 from tripmate.config.settings import settings
+from tripmate.core.logging import get_structured_logger
 from tripmate.core.singleton import SingletonMeta
 from tripmate.database.store import store
 from tripmate.graph.state import TravelState
 from tripmate.graph.workflow import travel_workflow_graph
-from tripmate.core.logging import get_structured_logger
 from tripmate.services.observability import calculate_cost, estimate_tokens
 
 logger = get_structured_logger("tripmate.travel_service")
