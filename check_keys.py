@@ -66,6 +66,31 @@ def _missing(api_key: str):
     return None
 
 
+def test_gemini(api_key: str):
+    missing = _missing(api_key)
+    if missing:
+        return missing
+    key = _clean_key(api_key)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    req = urllib.request.Request(url)
+    status, body, err = _call(req)
+    if err and status != 200:
+        if status in (400, 403):
+            return "INVALID", f"HTTP {status}: Invalid Gemini API key or permission denied"
+        return ("INVALID", err) if str(status).startswith(("4", "5")) else ("ERROR", err)
+    try:
+        data = json.loads(body)
+        models = data.get("models", [])
+        model_names = [m.get("name", "").split("/")[-1] for m in models]
+        flash_found = any("flash" in m for m in model_names)
+        detail = f"{len(models)} models available"
+        if flash_found:
+            detail += " (gemini-1.5-flash / gemini-2.0 ready)"
+        return "VALID", f"{detail} (HTTP {status})"
+    except Exception:
+        return "VALID", f"authenticated successfully (HTTP {status})"
+
+
 def test_groq(api_key: str):
     missing = _missing(api_key)
     if missing:
@@ -211,6 +236,7 @@ def main():
     print("-" * 80)
 
     checks = [
+        ("GEMINI_API_KEY", test_gemini),
         ("GROQ_API_KEY", test_groq),
         ("OPENROUTER_API_KEY", test_openrouter),
         ("HUGGINGFACE_API_KEY", test_huggingface),
@@ -245,13 +271,14 @@ def main():
     print(f"Summary: {valid_count} of {len(checks)} keys verified successfully.")
     
     # Practical guidance
+    gemini_ok = any(name == "GEMINI_API_KEY" and st == "VALID" for name, st in results)
     groq_ok = any(name == "GROQ_API_KEY" and st == "VALID" for name, st in results)
     openrouter_ok = any(name == "OPENROUTER_API_KEY" and st == "VALID" for name, st in results)
     
-    if not groq_ok and not openrouter_ok:
-        print("\n[!] NOTICE: At least one LLM provider (GROQ_API_KEY or OPENROUTER_API_KEY)")
+    if not gemini_ok and not groq_ok and not openrouter_ok:
+        print("\n[!] NOTICE: At least one LLM provider (GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY)")
         print("    is required for the travel planner and specialist agents to run.")
-        print("    Get free keys at: https://console.groq.com/keys or https://openrouter.ai/keys")
+        print("    Get free keys at: https://aistudio.google.com, https://console.groq.com/keys, or https://openrouter.ai/keys")
     else:
         print("\n[+] Core LLM provider is active and ready for travel planning!")
     print("=" * 80)

@@ -151,14 +151,18 @@ class Settings(BaseSettings):
     )
 
     # External API Keys for AI & MCP services
+    GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
     HUGGINGFACE_API_KEY: str = ""
     TAVILY_API_KEY: str = ""
     OPENWEATHER_API_KEY: str = ""
     AVIATIONSTACK_API_KEY: str = ""
+    PREFERRED_LLM_PROVIDER: str = ""
 
     # Model Tier Selection
+    GEMINI_FAST_MODEL: str = "gemini-1.5-flash"
+    GEMINI_REASONING_MODEL: str = "gemini-1.5-flash"
     FAST_LLM_MODEL: str = "llama-3.1-8b-instant"
     REASONING_LLM_MODEL: str = "llama-3.3-70b-versatile"
     OPENROUTER_FAST_MODEL: str = "meta-llama/llama-3.2-3b-instruct:free"
@@ -403,10 +407,10 @@ class Settings(BaseSettings):
         """Validates that mandatory API keys and security configs are present when running in production mode."""
         if self.is_production:
             missing = []
-            has_llm = bool(self.GROQ_API_KEY or self.OPENROUTER_API_KEY or self.HUGGINGFACE_API_KEY)
+            has_llm = bool(self.GEMINI_API_KEY or self.GROQ_API_KEY or self.OPENROUTER_API_KEY or self.HUGGINGFACE_API_KEY)
             if not has_llm:
                 missing.append(
-                    "At least one LLM Provider Key (GROQ_API_KEY, OPENROUTER_API_KEY, or HUGGINGFACE_API_KEY)"
+                    "At least one LLM Provider Key (GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or HUGGINGFACE_API_KEY)"
                 )
             if not self.API_KEY:
                 missing.append("API_KEY (used for authorization and token signing)")

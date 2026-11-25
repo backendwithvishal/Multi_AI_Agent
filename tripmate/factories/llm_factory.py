@@ -9,6 +9,7 @@ providers or missing credentials are requested.
 from typing import Any, Dict
 
 from tripmate.strategies.llm_strategies import (
+    GeminiProviderStrategy,
     GroqProviderStrategy,
     HuggingFaceProviderStrategy,
     LLMProviderStrategy,
@@ -23,6 +24,7 @@ class LLMClientFactory:
     """
 
     _strategies: Dict[str, LLMProviderStrategy] = {
+        "gemini": GeminiProviderStrategy(),
         "groq": GroqProviderStrategy(),
         "openrouter": OpenRouterProviderStrategy(),
         "huggingface": HuggingFaceProviderStrategy(),

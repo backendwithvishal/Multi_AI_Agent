@@ -19,6 +19,9 @@ from tripmate.middleware.metrics import metrics_registry
 logger = logging.getLogger("tripmate.llm_resilience")
 
 # Register Circuit Breakers for external LLM providers
+gemini_breaker = circuit_breaker_registry.register(
+    CircuitBreaker("gemini_llm", failure_threshold=3, cooldown_seconds=30.0)
+)
 groq_breaker = circuit_breaker_registry.register(CircuitBreaker("groq_llm", failure_threshold=3, cooldown_seconds=30.0))
 openrouter_breaker = circuit_breaker_registry.register(
     CircuitBreaker("openrouter_llm", failure_threshold=3, cooldown_seconds=30.0)
@@ -28,6 +31,7 @@ huggingface_breaker = circuit_breaker_registry.register(
 )
 
 PROVIDER_BREAKERS: Dict[str, CircuitBreaker] = {
+    "gemini": gemini_breaker,
     "groq": groq_breaker,
     "openrouter": openrouter_breaker,
     "huggingface": huggingface_breaker,
@@ -61,13 +65,28 @@ async def execute_with_backoff_and_jitter(
 async def invoke_llm_with_resilience(
     llm: Any,
     messages: Any,
-    provider_name: str = "groq",
+    provider_name: Optional[str] = None,
     timeout: Optional[float] = None,
     max_retries: int = 1,
 ) -> Any:
     """Invokes LLM with per-call timeout, bounded retries, jitter, and circuit breaker."""
     if not llm:
         raise ValueError("No LLM client configured.")
+
+    # Auto-detect provider if not explicitly provided
+    if not provider_name:
+        llm_type = type(llm).__name__.lower()
+        if "google" in llm_type or "gemini" in llm_type:
+            provider_name = "gemini"
+        elif "groq" in llm_type:
+            provider_name = "groq"
+        else:
+            try:
+                from tripmate.services.model_router import model_router
+
+                provider_name = model_router.get_active_provider_name() or "groq"
+            except Exception:
+                provider_name = "groq"
 
     effective_timeout = timeout or settings.LLM_TIMEOUT_SECONDS
     breaker = PROVIDER_BREAKERS.get(provider_name.lower(), groq_breaker)

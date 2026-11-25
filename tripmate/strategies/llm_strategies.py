@@ -27,6 +27,18 @@ class ModelTier(str, Enum):
 def create_openai_compatible_client(model_name: str, api_key: str, base_url: str, timeout: float) -> Any:
     """Helper creating an OpenAI-compatible REST API client for OpenRouter and Hugging Face."""
     try:
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
+        )
+    except Exception:
+        pass
+
+    try:
         from langchain_groq import ChatGroq
 
         return ChatGroq(
@@ -76,6 +88,64 @@ class LLMProviderStrategy(ABC):
     def create_model(self, tier: ModelTier, timeout: float) -> Optional[Any]:
         """Instantiates and returns the provider chat model client for the requested tier."""
         pass
+
+
+class GeminiProviderStrategy(LLMProviderStrategy):
+    """LLM Strategy using Google Gemini (via ChatGoogleGenerativeAI or OpenAI-compatible endpoint)."""
+
+    @property
+    def provider_name(self) -> str:
+        return "gemini"
+
+    @property
+    def priority(self) -> int:
+        return 0  # Highest priority when configured; falls back to Groq (1) if unconfigured
+
+    @property
+    def api_key(self) -> Optional[str]:
+        return (
+            getattr(settings, "GEMINI_API_KEY", "")
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or ""
+        ).strip() or None
+
+    def is_configured(self) -> bool:
+        return bool(self.api_key)
+
+    def create_model(self, tier: ModelTier, timeout: float) -> Optional[Any]:
+        api_key = self.api_key
+        if not api_key:
+            return None
+
+        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        if tier == ModelTier.FAST:
+            model_name = os.getenv("GEMINI_FAST_MODEL", os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+        elif tier == ModelTier.REASONING:
+            model_name = os.getenv("GEMINI_REASONING_MODEL", os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+
+            return ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=api_key,
+                timeout=timeout,
+            )
+        except Exception as exc:
+            logger.warning(f"GeminiProviderStrategy (ChatGoogleGenerativeAI) notice: {exc}")
+
+        # Fallback: Google Gemini OpenAI-compatible endpoint
+        try:
+            return create_openai_compatible_client(
+                model_name=model_name,
+                api_key=api_key,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                timeout=timeout,
+            )
+        except Exception as exc:
+            logger.warning(f"GeminiProviderStrategy (OpenAI-compatible) notice: {exc}")
+            return None
 
 
 class GroqProviderStrategy(LLMProviderStrategy):

@@ -32,7 +32,7 @@ async def test_inference():
     active_provider = model_router.get_active_provider_name()
     if not active_provider:
         print("[!] No LLM provider found in .env.")
-        print("    Please set GROQ_API_KEY, OPENROUTER_API_KEY, or HUGGINGFACE_API_KEY in .env.")
+        print("    Please set GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or HUGGINGFACE_API_KEY in .env.")
         print("    Then re-run this script: python test_live_inference.py")
         print("=" * 70)
         return

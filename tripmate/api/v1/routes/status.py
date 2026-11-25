@@ -51,8 +51,10 @@ async def get_system_status(request: Request):
         circuit_breakers=breakers,
         agent_registry=agent_names,
         model_tiers={
-            "groq_configured": bool(settings.GROQ_API_KEY),
-            "openrouter_configured": bool(settings.OPENROUTER_API_KEY),
+            "gemini_configured": bool(settings.GEMINI_API_KEY or os.getenv("GEMINI_API_KEY")),
+            "groq_configured": bool(settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY")),
+            "openrouter_configured": bool(settings.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY")),
+            "huggingface_configured": bool(settings.HUGGINGFACE_API_KEY or os.getenv("HUGGINGFACE_API_KEY")),
         },
         cache_backend=cache_stats.get("backend", "in_memory"),
     )
