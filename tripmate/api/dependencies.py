@@ -43,20 +43,27 @@ async def verify_api_key(
             provided_key = parts[1].strip()
 
     expected_key = settings.API_KEY
+    if expected_key and ("your-" in expected_key.lower() or "-here" in expected_key.lower()):
+        expected_key = None
 
     # Development mode without enforced authentication
     if not settings.AUTH_REQUIRED:
         if not provided_key:
             return "anonymous_dev_user"
-        if expected_key and not secrets.compare_digest(provided_key, expected_key):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={
-                    "code": "UNAUTHORIZED",
-                    "message": "Invalid API key provided. Provide a valid X-API-Key or Bearer token header.",
-                },
-            )
-        return provided_key
+        if expected_key and secrets.compare_digest(provided_key, expected_key):
+            return provided_key
+        # Check if provided token is a valid signed session token or user api key
+        if verify_token(provided_key) or store.get_user_by_api_key(provided_key):
+            return provided_key
+        if not expected_key:
+            return provided_key
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "UNAUTHORIZED",
+                "message": "Invalid API key provided. Provide a valid X-API-Key or Bearer token header.",
+            },
+        )
 
     # Production / Enforced Authentication Mode
     if not provided_key:

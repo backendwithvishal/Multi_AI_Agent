@@ -5,6 +5,7 @@ Endpoint:
 - GET /api/v1/status: Operational telemetry, agent registry availability, circuit breakers, cache backend
 """
 
+import os
 from fastapi import APIRouter, Request
 
 from tripmate.agents.registry import agent_registry

@@ -62,10 +62,10 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 def _get_signing_secret() -> str:
     """Returns the cryptographic signing key, requiring explicit secret in production."""
-    secret = settings.API_KEY
+    secret = settings.JWT_SECRET_KEY or settings.API_KEY
     if not secret:
         if settings.APP_ENV == "production":
-            raise RuntimeError("API_KEY must be configured in production for secure token signing.")
+            raise RuntimeError("JWT_SECRET_KEY or API_KEY must be configured in production for secure token signing.")
         return "tripmate_platform_secret_key_2026"
     return secret
 

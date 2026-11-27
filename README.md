@@ -59,36 +59,90 @@ flowchart TD
 
 ## Quick Start
 
-### 1. Clone & Set Up Environment
+### 1. Environment Setup
+
+#### Windows (PowerShell):
+```powershell
+# Clone the repository
+git clone https://github.com/backendwithvishal/Multi_AI_Agent.git
+cd Multi_AI_Agent
+
+# Create and activate virtual environment
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment configuration template
+Copy-Item .env.example .env
+```
+
+#### Linux / macOS:
 ```bash
 git clone https://github.com/backendwithvishal/Multi_AI_Agent.git
 cd Multi_AI_Agent
 python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Linux/macOS:
 source .venv/bin/activate
-
 pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2. Configure Minimum Environment
-Edit `.env` and set at least one LLM key:
-```env
-GROQ_API_KEY=gsk_your_groq_api_key_here
-APP_ENV=development
+### 2. Configure Environment & LLM Provider
+
+Open `.env` in any text editor. In development, **no external authentication API keys are required**.
+
+To enable AI agent reasoning, configure **at least one** LLM provider:
+- **Groq (Free & Fast):** Get a free key at [console.groq.com](https://console.groq.com) and set:
+  ```env
+  GROQ_API_KEY=gsk_your_groq_api_key_here
+  ```
+- **Google Gemini:** Set `GEMINI_API_KEY=your_key`
+- **OpenRouter (Free models):** Set `OPENROUTER_API_KEY=your_key`
+- **Hugging Face:** Set `HUGGINGFACE_API_KEY=your_key`
+- **Local Ollama (No API Key Required):** Run Ollama locally and set:
+  ```env
+  OLLAMA_BASE_URL=http://localhost:11434/v1
+  ```
+
+### 3. Local Redis Setup (Free & Local)
+
+You do **not** need Redis Cloud, a paid subscription, or external Redis credentials.
+
+Start Redis locally via Docker Compose:
+```powershell
+# Start local Redis on localhost:6379 in the background
+docker compose up -d redis
+
+# Verify Redis is running
+docker compose ps
+
+# Stop Redis when finished
+docker compose stop redis
 ```
 
-### 3. Run Application
-```bash
+> **Note on Redis Resilience:** If Redis is not running, the application automatically falls back to an in-memory bounded TTL cache (`BoundedAsyncTTLCache`). The application will never crash or fail to start because Redis is offline.
+
+### 4. Run Application
+
+#### Windows PowerShell:
+```powershell
 python app.py
 ```
-App starts at `http://127.0.0.1:8000`. Interactive documentation is available at `http://127.0.0.1:8000/docs`.
 
-### 4. Docker Compose
-```bash
-docker compose up --build
+#### Or with Uvicorn:
+```powershell
+uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+- **Interactive Swagger API Docs:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- **Alternative ReDoc:** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+- **Health Telemetry:** [http://127.0.0.1:8000/api/v1/health](http://127.0.0.1:8000/api/v1/health)
+
+### 5. Full Docker Compose (App + Postgres + Redis)
+
+```powershell
+docker compose up -d --build
 ```
 
 ---
@@ -219,6 +273,9 @@ docker compose up --build
 | `EXTERNAL_API_TIMEOUT_SECONDS` | `10.0` | Timeout for external HTTP requests |
 | `FAIL_OPEN_REDIS` | `false` | Fallback behavior when Redis is unavailable |
 | `FAST_LLM_MODEL` | `"llama-3.1-8b-instant"` | Fast model for guardrail and routing tasks |
+| `GEMINI_API_KEY` | `""` | Google Gemini API provider key |
+| `GEMINI_FAST_MODEL` | `"gemini-1.5-flash"` | Gemini fast model identifier |
+| `GEMINI_REASONING_MODEL` | `"gemini-1.5-flash"` | Gemini reasoning model identifier |
 | `GRACEFUL_TIMEOUT` | `30` | Grace period in seconds on shutdown |
 | `GROQ_API_KEY` | `""` | Groq API provider key |
 | `HUGGINGFACE_API_KEY` | `""` | HuggingFace Inference API key |
@@ -262,6 +319,25 @@ docker compose up --build
 | `TOOL_ALLOWED_HOSTS` | `["*"]` | Permitted outbound network hosts for tools |
 | `TRUSTED_PROXIES` | `["127.0.0.1"]` | Trusted proxy IP addresses for header forwarding |
 | `WEB_CONCURRENCY` | `1` | Number of Gunicorn worker processes |
+
+---
+
+## API Keys: Required vs Optional
+
+| Configuration / Key | Required? | Purpose & Fallback Behavior |
+|:---|:---|:---|
+| **`GROQ_API_KEY`** | Recommended | Free & ultra-fast LLM inference ([console.groq.com](https://console.groq.com)). |
+| **`GEMINI_API_KEY`** | Optional | Google Gemini models (`gemini-1.5-flash`). Fallback if Groq not set. |
+| **`OPENROUTER_API_KEY`** | Optional | OpenRouter gateway with free Llama models. |
+| **`HUGGINGFACE_API_KEY`** | Optional | Hugging Face serverless inference. |
+| **`OLLAMA_BASE_URL`** | Optional | **100% Free & Local.** No API key needed. Defaults to `http://localhost:11434/v1`. |
+| **`API_KEY`** | **Not Required** in Dev | Master API key. In development (`AUTH_REQUIRED=false`), completely optional. |
+| **`REDIS_URL`** | Optional | `redis://localhost:6379/0`. If Redis is offline, automatically falls back to in-memory TTL cache. |
+| **`DATABASE_URL`** | Optional | PostgreSQL datastore. If not configured, in-memory datastore is used. |
+| **`TAVILY_API_KEY`** | Optional | Real-time web search for travel destinations. Falls back gracefully when omitted. |
+| **`OPENWEATHER_API_KEY`** | Optional | Live weather reports. Falls back to seasonal estimations when omitted. |
+| **`AVIATIONSTACK_API_KEY`** | Optional | Live flight tracker. Falls back to simulated airline schedules when omitted. |
+| **`LANGCHAIN_API_KEY`** | Optional | LangSmith distributed tracing. Disabled by default (`LANGCHAIN_TRACING_V2=false`). |
 
 ---
 

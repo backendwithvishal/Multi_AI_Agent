@@ -64,6 +64,21 @@ def create_openai_compatible_client(model_name: str, api_key: str, base_url: str
         return None
 
 
+def is_valid_api_key(key: Optional[str]) -> bool:
+    """Validates that a provided key is not empty, placeholder, or incomplete prefix."""
+    if not key or not isinstance(key, str):
+        return False
+    cleaned = key.strip()
+    if not cleaned or len(cleaned) < 8:
+        return False
+    lower = cleaned.lower()
+    if lower.startswith("your-") or lower.endswith("-here") or "placeholder" in lower:
+        return False
+    if cleaned in ("gsk_", "hf_", "tvly-", "sk-"):
+        return False
+    return True
+
+
 class LLMProviderStrategy(ABC):
     """Abstract Strategy interface for an LLM provider."""
 
@@ -111,11 +126,11 @@ class GeminiProviderStrategy(LLMProviderStrategy):
         ).strip() or None
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return is_valid_api_key(self.api_key)
 
     def create_model(self, tier: ModelTier, timeout: float) -> Optional[Any]:
         api_key = self.api_key
-        if not api_key:
+        if not is_valid_api_key(api_key):
             return None
 
         model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
@@ -164,11 +179,11 @@ class GroqProviderStrategy(LLMProviderStrategy):
         return (settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY") or "").strip() or None
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return is_valid_api_key(self.api_key)
 
     def create_model(self, tier: ModelTier, timeout: float) -> Optional[Any]:
         api_key = self.api_key
-        if not api_key:
+        if not is_valid_api_key(api_key):
             return None
 
         model_name = "llama-3.3-70b-versatile"
@@ -206,11 +221,11 @@ class OpenRouterProviderStrategy(LLMProviderStrategy):
         return (settings.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY") or "").strip() or None
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return is_valid_api_key(self.api_key)
 
     def create_model(self, tier: ModelTier, timeout: float) -> Optional[Any]:
         api_key = self.api_key
-        if not api_key:
+        if not is_valid_api_key(api_key):
             return None
 
         if tier == ModelTier.FAST:
@@ -254,11 +269,11 @@ class HuggingFaceProviderStrategy(LLMProviderStrategy):
         ).strip() or None
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return is_valid_api_key(self.api_key)
 
     def create_model(self, tier: ModelTier, timeout: float) -> Optional[Any]:
         api_key = self.api_key
-        if not api_key:
+        if not is_valid_api_key(api_key):
             return None
 
         if tier == ModelTier.FAST:
@@ -278,4 +293,45 @@ class HuggingFaceProviderStrategy(LLMProviderStrategy):
             )
         except Exception as exc:
             logger.warning(f"HuggingFaceProviderStrategy initialization notice: {exc}")
+            return None
+
+
+class OllamaProviderStrategy(LLMProviderStrategy):
+    """Local LLM Strategy using Ollama (free local execution, no API key required)."""
+
+    @property
+    def provider_name(self) -> str:
+        return "ollama"
+
+    @property
+    def priority(self) -> int:
+        return 4
+
+    @property
+    def base_url(self) -> str:
+        return (os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434/v1").rstrip("/")
+
+    @property
+    def model_name(self) -> str:
+        return os.getenv("OLLAMA_MODEL", "llama3.2")
+
+    def is_configured(self) -> bool:
+        return bool(
+            os.getenv("OLLAMA_BASE_URL")
+            or os.getenv("USE_LOCAL_LLM", "").lower() in ("true", "1")
+        )
+
+    def create_model(self, tier: ModelTier, timeout: float) -> Optional[Any]:
+        fast_model = os.getenv("OLLAMA_FAST_MODEL", self.model_name)
+        reasoning_model = os.getenv("OLLAMA_REASONING_MODEL", self.model_name)
+        model = fast_model if tier == ModelTier.FAST else reasoning_model
+        try:
+            return create_openai_compatible_client(
+                model_name=model,
+                api_key="ollama",
+                base_url=self.base_url,
+                timeout=timeout,
+            )
+        except Exception as exc:
+            logger.warning(f"OllamaProviderStrategy initialization notice: {exc}")
             return None

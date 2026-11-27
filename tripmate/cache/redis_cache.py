@@ -280,6 +280,20 @@ class RedisHybridCache:
 
         if settings.is_test and not os.getenv("RUN_LIVE_REDIS_TESTS"):
             return True
+        if self._redis_client is None and self.redis_url and aioredis is not None:
+            try:
+                resolved_url = self.redis_url
+                if "://localhost" in resolved_url:
+                    resolved_url = resolved_url.replace("://localhost", "://127.0.0.1")
+                self._redis_client = aioredis.from_url(
+                    resolved_url,
+                    decode_responses=True,
+                    socket_timeout=1.0,
+                    socket_connect_timeout=1.0,
+                    protocol=2,
+                )
+            except Exception:
+                pass
         if self._redis_client:
             try:
                 res = await asyncio.wait_for(self._redis_client.ping(), timeout=1.0)

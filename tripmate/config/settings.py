@@ -158,7 +158,6 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str = ""
     OPENWEATHER_API_KEY: str = ""
     AVIATIONSTACK_API_KEY: str = ""
-    PREFERRED_LLM_PROVIDER: str = ""
 
     # Model Tier Selection
     GEMINI_FAST_MODEL: str = "gemini-1.5-flash"
@@ -301,7 +300,10 @@ class Settings(BaseSettings):
 
         # Fallback aliases from environment if not populated
         if not self.API_KEY:
-            self.API_KEY = _parse_str("API_KEY") or None
+            self.API_KEY = _parse_str("API_KEY") or _parse_str("AUTH_API_KEY") or None
+        if self.API_KEY and ("your-" in self.API_KEY.lower() or "-here" in self.API_KEY.lower()):
+            if not self.is_production:
+                self.API_KEY = None
         if not self.JWT_SECRET_KEY:
             self.JWT_SECRET_KEY = _parse_str("JWT_SECRET_KEY") or _parse_str("SECRET_KEY") or None
         if not self.ADMIN_REGISTRATION_SECRET:

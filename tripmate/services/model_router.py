@@ -23,6 +23,7 @@ from tripmate.strategies.llm_strategies import (
     HuggingFaceProviderStrategy,
     LLMProviderStrategy,
     ModelTier,
+    OllamaProviderStrategy,
     OpenRouterProviderStrategy,
     create_openai_compatible_client,
 )
@@ -35,7 +36,7 @@ _create_openai_compatible_client = create_openai_compatible_client
 
 class ModelRouter(metaclass=SingletonMeta):
     """
-    Manages LLM provider routing with fallback across Gemini, Groq, OpenRouter, and Hugging Face.
+    Manages LLM provider routing with fallback across Gemini, Groq, OpenRouter, Hugging Face, and Ollama.
     Implemented as a thread-safe Singleton using Strategy Pattern for provider execution.
     """
 
@@ -48,6 +49,7 @@ class ModelRouter(metaclass=SingletonMeta):
                 GroqProviderStrategy(),
                 OpenRouterProviderStrategy(),
                 HuggingFaceProviderStrategy(),
+                OllamaProviderStrategy(),
             ]
 
     def register_strategy(self, strategy: LLMProviderStrategy) -> None:
@@ -80,19 +82,7 @@ class ModelRouter(metaclass=SingletonMeta):
 
     def _sorted_strategies(self) -> List[LLMProviderStrategy]:
         load_dotenv(BASE_DIR / ".env", override=False)
-        preferred = (
-            getattr(settings, "PREFERRED_LLM_PROVIDER", "")
-            or os.getenv("PREFERRED_LLM_PROVIDER")
-            or os.getenv("LLM_PROVIDER")
-            or ""
-        ).strip().lower()
-
-        def _sort_key(s: LLMProviderStrategy):
-            if preferred and s.provider_name.lower() == preferred:
-                return -1
-            return s.priority
-
-        return sorted(self._strategies, key=_sort_key)
+        return sorted(self._strategies, key=lambda s: s.priority)
 
     def has_active_provider(self) -> bool:
         """Returns True if at least one LLM provider key is configured."""
